@@ -7,8 +7,10 @@
 # - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
 # - Performs auto-login across 6 platforms, resolves Error 22 auto-takeover
 # - Dismisses modals & USDT bonus announcements continuously
-# - Executes 24/7 invisible ghost martingale trading engine (WinGo 30S)
-# - Robust 24/7 execution: never stops auto-trade on balance checks or status queries
+# - Executes 24/7 invisible ghost Step Maker trading engine (WinGo 30S)
+# - Robust 24/7 execution: never shrinks steps on losses, no decimals/fractions
+# - Monochrome aesthetic: ֎ ✧ ⏣ 𖤓 ﴾ ﴿ ⪼ ⟡ ▸ ▰▰▰▱ ⬩➤ ❯❯❯❯ ✦︎
+# - Mathematical bold numbers: 𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗 & subscripts: ₀₁₂₃₄₅₆₇₈₉
 # ==============================================================================
 
 import os
@@ -106,6 +108,24 @@ PLATFORMS = {
 # ==============================================================================
 # MATHEMATICAL BOLD UNICODE & FORMATTERS
 # ==============================================================================
+BOLD_DIGITS = {
+    '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
+    '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
+}
+
+SUB_DIGITS = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+    '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+}
+
+def to_bold_num(val) -> str:
+    s = str(val)
+    return "".join(BOLD_DIGITS.get(c, c) for c in s)
+
+def to_sub_num(val) -> str:
+    s = str(val)
+    return "".join(SUB_DIGITS.get(c, c) for c in s)
+
 def to_bold(text: str) -> str:
     res = []
     for c in str(text):
@@ -115,7 +135,7 @@ def to_bold(text: str) -> str:
         elif 97 <= n <= 122:
             res.append(chr(n + 119737))
         elif 48 <= n <= 57:
-            res.append(chr(n + 120764))
+            res.append(BOLD_DIGITS.get(c, c))
         else:
             res.append(c)
     return "".join(res)
@@ -228,7 +248,6 @@ def allocate_session_tab(session_id, target_url):
     if HEADLESS_MODE:
         options.add_argument("--headless")
 
-    # Critical Container Stability Flags (Prevents Status 0 Crash on Railway/Docker/Linux)
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -239,7 +258,6 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # Low RAM & Anti-Freeze Tuning
     options.set_preference("dom.ipc.processCount", 1)
     options.set_preference("browser.sessionhistory.max_entries", 2)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
@@ -286,7 +304,6 @@ def safe_tab_execute(sid, task_fn, timeout=25.0):
     if not driver or not lock:
         return None
 
-    # Acquire lock without blocking indefinitely
     acquired = lock.acquire(timeout=6.0)
     if not acquired:
         return None
@@ -311,7 +328,7 @@ def safe_tab_execute(sid, task_fn, timeout=25.0):
         pass
 
     if not result_container["completed"]:
-        logger.warning(f"Tab execution took longer than {timeout}s on sid: {sid}, resuming...")
+        logger.warning(f"Tab execution tick exceeded {timeout}s on sid: {sid}, continuing...")
         return None
 
     gc.collect()
@@ -352,12 +369,11 @@ def close_session_tab(session_id):
     gc.collect()
 
 # ==============================================================================
-# INJECTED JAVASCRIPT AUTOMATION (EXACT LOGIC PRESERVED)
+# INJECTED JAVASCRIPT AUTOMATION
 # ==============================================================================
 MODAL_AUTO_DISMISSER_JS = """
 (function(){
     const sweepModals = () => {
-        // Specifically kill Announcement & USDT Bonus Popups
         const targetBonusDialogs = document.querySelectorAll('.announcement-box, .dialog-box, .bonus-dialog, .van-popup, .van-dialog');
         targetBonusDialogs.forEach(dialog => {
             const txt = (dialog.innerText || '').toLowerCase();
@@ -610,7 +626,7 @@ return 0;
 """
 
 # ==============================================================================
-# INTEGRATED 24/7 INVISIBLE GHOST TRADING ENGINE (NEVER STOPS PREMATURELY)
+# INTEGRATED 24/7 INVISIBLE GHOST STEP MAKER TRADING ENGINE
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetProfit = arguments[0];
@@ -642,12 +658,30 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         clearInterval(window.__WINGO_ST.autoInt);
     }
 
+    // Step Maker Algorithm: strictly NO decimals / points (Math.floor)
+    const calcSeq = (cBal, nSteps) => {
+        let B = Math.floor(Number(cBal)) || 0;
+        let n = parseInt(nSteps) || 5;
+        if (n < 1) n = 1;
+        let sumPowers = Math.pow(2, n) - 1;
+        let firstStep = Math.floor(B / sumPowers);
+        if (firstStep < 1) firstStep = 1;
+        let seq = [];
+        for (let i = 0; i < n; i++) {
+            let step = Math.floor(firstStep * Math.pow(2, i));
+            if (step < 1) step = 1;
+            seq.push(step);
+        }
+        return seq;
+    };
+
     const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
     const st = {
         isRun: true,
         targetProfit: parseFloat(autoTargetProfit) || 0,
         tgtAmt: 0,
         startBal: 0,
+        baseBal: 0,
         curBal: 0,
         autoInt: null,
         isTrd: false,
@@ -668,7 +702,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
 
     function chkBal() {
         try {
-            // Fast targeted balance query to prevent any DOM reflow freeze
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
             for (let i = 0; i < targeted.length; i++) {
                 let txt = targeted[i].innerText || '';
@@ -704,7 +737,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         return st.curBal || 0;
     }
 
-    // WinGo 30s Countdown Inspector to bypass betting in the 5-second freeze
     function getRemainingSeconds() {
         try {
             let timeEl = document.querySelector('.time-box, [class*="time" i], .Time');
@@ -718,25 +750,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         } catch(e){}
         return 30;
     }
-
-    const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 0;
-        let n = parseInt(nSteps) || 5;
-        if (n < 1) n = 1;
-        let u = Math.pow(2, n) - 1;
-        let s1 = Math.floor(B / u);
-        if (s1 < 1) s1 = 1;
-        let seq = [];
-        let sum = 0;
-        for (let k = 1; k < n; k++) {
-            let sk = Math.floor(s1 * Math.pow(2, k - 1));
-            seq.push(sk);
-            sum += sk;
-        }
-        let sn = Math.floor(B - sum);
-        seq.push(sn > 0 ? sn : Math.floor(s1 * Math.pow(2, n - 1)));
-        return seq;
-    };
 
     const getNextLivePeriod = (str) => {
         let chars = String(str).split('');
@@ -769,7 +782,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
 
     const exeTrd = (pred, amt, cb) => {
         try {
-            // Guard: Never place bet during locked last 5 seconds
             let remSec = getRemainingSeconds();
             if (remSec <= 5 && remSec > 0) {
                 if (cb) cb(false);
@@ -843,13 +855,14 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
+    st.baseBal = initialBal > 0 ? initialBal : 100;
     if (initialBal > 0 && st.targetProfit > 0) {
         st.tgtAmt = initialBal + st.targetProfit;
     } else {
-        st.tgtAmt = 0; // Calculated dynamically once real positive balance is confirmed
+        st.tgtAmt = 0;
     }
 
-    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : 100, st.steps);
+    st.dynSeq = calcSeq(st.baseBal, st.steps);
     st.stpIdx = 0;
     sessionStorage.removeItem('drx_sig');
 
@@ -864,13 +877,14 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             if (liveB > 0) {
                 if (st.startBal <= 0) {
                     st.startBal = liveB;
+                    st.baseBal = liveB;
+                    st.dynSeq = calcSeq(st.baseBal, st.steps);
                     if (st.targetProfit > 0) {
                         st.tgtAmt = st.startBal + st.targetProfit;
                     }
                 }
             }
 
-            // ONLY terminate if real target profit is legitimately reached above starting balance
             if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0 && st.curBal > st.startBal) {
                 st.isRun = false;
                 st.isTrd = false;
@@ -889,7 +903,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
                 let histArray = rawJson.history || (rawJson.data && rawJson.data.history) || [];
 
-                // Support array / data-vip format
                 if (!nextObj && Array.isArray(rawJson) && rawJson[0]) {
                     let first = rawJson[0];
                     if (first.next) {
@@ -916,7 +929,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     let sSig = sessionStorage.getItem('drx_sig');
 
                     if (cSig && cSig !== sSig) {
-                        // Previous bet result evaluation
                         if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
                             let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastPeriod)) || histArray[0];
                             let won = false;
@@ -952,12 +964,21 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                                 st.cur_w_streak++;
                                 st.cur_l_streak = 0;
                                 if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                                // Reset step index to step 1 on WIN
                                 st.stpIdx = 0;
+
+                                // If account balance increased, dynamically recalculate sequence for the higher capital
+                                let freshBal = chkBal();
+                                if (freshBal > st.baseBal) {
+                                    st.baseBal = freshBal;
+                                    st.dynSeq = calcSeq(st.baseBal, st.steps);
+                                }
                             } else {
                                 st.l++;
                                 st.cur_l_streak++;
                                 st.cur_w_streak = 0;
                                 if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+                                // On loss: strictly advance step index without shrinking step amount
                                 st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
                             }
                         }
@@ -975,14 +996,9 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                             return;
                         }
 
-                        st.dynSeq = calcSeq(nBal > 0 ? nBal : 100, st.steps);
+                        // Ensure step index stays in bounds
                         if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
                         let tAmt = st.dynSeq[st.stpIdx] || 1;
-
-                        if (nBal > 0 && nBal < tAmt) {
-                            st.stpIdx = 0;
-                            tAmt = st.dynSeq[0] || 1;
-                        }
 
                         let rawPred = (nextObj && (nextObj.size || nextObj.pred)) ||
                                       rawJson.size ||
@@ -1107,7 +1123,6 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         })
         return
 
-    # Sweep USDT bonus immediately
     safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
     time.sleep(1.0)
 
@@ -1174,6 +1189,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         curBal: window.__WINGO_ST.curBal || 0,
                         tgtAmt: window.__WINGO_ST.tgtAmt || 0,
                         startBal: window.__WINGO_ST.startBal || 0,
+                        baseBal: window.__WINGO_ST.baseBal || 0,
                         targetProfit: window.__WINGO_ST.targetProfit || 0,
                         w: window.__WINGO_ST.w || 0,
                         l: window.__WINGO_ST.l || 0,
@@ -1209,7 +1225,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            # Check if target profit is genuinely reached
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0 and sess["cur_bal"] > start_b:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
@@ -1339,7 +1354,6 @@ def worker_task_listener():
                 elif kind == "REQUEST_BALANCE" and sid in active_sessions:
                     sess = active_sessions[sid]
                     def _b(drv):
-                        # Fast memory read first
                         b = drv.execute_script("return (window.__WINGO_ST && window.__WINGO_ST.curBal) ? window.__WINGO_ST.curBal : null;")
                         if b is None or float(b) == 0:
                             b = drv.execute_script(FETCH_BALANCE_JS)
