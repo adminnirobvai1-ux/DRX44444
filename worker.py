@@ -258,13 +258,21 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    options.set_preference("dom.ipc.processCount", 1)
-    options.set_preference("browser.sessionhistory.max_entries", 2)
+    # Ultra-low 0.5 GB (512 MB) RAM profile
+    options.set_preference("permissions.default.image", 2)  # Disables image downloads (saves 150-200MB RAM)
+    options.set_preference("permissions.default.stylesheet", 1)
+    options.set_preference("browser.display.use_document_fonts", 0)  # Disables web font downloads
+    options.set_preference("media.autoplay.default", 5)  # Disables audio/video autoplay
+    options.set_preference("media.volume_scale", "0.0")
+    options.set_preference("dom.ipc.processCount", 1)  # Strictly single content process (saves 100MB+ RAM)
+    options.set_preference("browser.sessionhistory.max_entries", 1)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
-    options.set_preference("image.mem.surfacecache.max_size_kb", 1024)
-    options.set_preference("javascript.options.mem.max", 32768)
+    options.set_preference("image.mem.surfacecache.max_size_kb", 512)
+    options.set_preference("javascript.options.mem.max", 24576)  # Limit JS heap to 24MB
+    options.set_preference("javascript.options.mem.high_water_mark", 18)
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", True)
+    options.set_preference("browser.cache.memory.capacity", 8192)  # 8MB memory cache
     options.set_preference("network.http.use-cache", False)
     options.set_preference("network.prefetch-next", False)
     options.set_preference("webgl.disabled", True)
@@ -274,6 +282,7 @@ def allocate_session_tab(session_id, target_url):
     options.set_preference("dom.popup_maximum", 0)
     options.set_preference("media.peerconnection.enabled", False)
     options.set_preference("media.navigator.enabled", False)
+    options.set_preference("layout.frame_rate", 10)  # Limits headless render loop to 10 FPS (cuts CPU load)
 
     service = FirefoxService(log_output=os.devnull)
     driver = webdriver.Firefox(service=service, options=options)
@@ -1149,26 +1158,19 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
     if not sess:
         return
 
-    verified = False
-    for _ in range(15):
-        safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
-        safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_PERSISTENT_NAV_JS, wingo_url))
-        time.sleep(2.0)
+    # Direct native navigation to WinGo 30S SaasLottery URL immediately (fast 2s execution)
+    try:
+        safe_tab_execute(sid, lambda drv: drv.get(wingo_url), timeout=15.0)
+    except Exception as e:
+        logger.warning(f"Direct nav exception for {wingo_url}: {e}")
 
-        is_ready = safe_tab_execute(sid, lambda drv: drv.execute_script(CHECK_WINGO_READY_JS))
-        if is_ready:
-            verified = True
-            break
-        time.sleep(1.0)
+    time.sleep(1.5)
+    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS), timeout=4.0)
 
-    if not verified:
-        safe_tab_execute(sid, lambda drv: drv.get(wingo_url))
-        time.sleep(3.0)
-        safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
-
+    # Fast balance check
     current_bal = 0.0
-    for _ in range(15):
-        bal = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS))
+    for _ in range(8):
+        bal = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS), timeout=3.0)
         if bal and float(bal) > 0:
             current_bal = float(bal)
             break
@@ -1176,7 +1178,7 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
 
     sess["current_balance"] = current_bal
     sess["cur_bal"] = current_bal
-    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
+    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS), timeout=3.0)
 
     emit_event_to_manager("WINGO_READY", {
         "session_id": sid,
@@ -1411,6 +1413,9 @@ def worker_task_listener():
                 elif kind == "STOP_TRADING" and sid in active_sessions:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); }"))
                     active_sessions[sid]["is_trading"] = False
+
+                elif kind == "CANCEL_PREPARE" and sid in active_sessions:
+                    logger.info(f"Market preparation cancelled by user for session: {sid}")
 
                 elif kind == "CANCEL_SESSION" and sid in active_sessions:
                     close_session_tab(sid)
