@@ -55,12 +55,12 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAENtjCFpUrJmSdviu6s_2BieWSgAE-Lyo4")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@bdg_club_707")
+CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
 CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/DARK67HACK")
 SUPER_ADMIN_ID = int(os.environ.get("SUPER_ADMIN_ID", 8707571669))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@MD_NAYEEM_DRX_TM")
 
-FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://server-51888-default-rtdb.firebaseio.com")
+FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 NODE_ID = f"mgr_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
@@ -208,7 +208,7 @@ def is_user_pass_valid(chat_id):
     return time.time() < u.get("pass_expiry", 0)
 
 # ==============================================================================
-# KEYBOARD MATRICES (VIP MONOCHROME GLYPH INTEGRATION)
+# KEYBOARD MATRICES (DESIGN 100% PRESERVED)
 # ==============================================================================
 def get_credentials_keyboard(sid):
     sess = active_sessions.get(sid, {})
@@ -217,21 +217,21 @@ def get_credentials_keyboard(sid):
 
     if not has_phone:
         markup.add(
-            InlineKeyboardButton(f"⬩➤ {to_bold('NUMBER')} ▸", callback_data=f"ask_num:{sid}"),
-            InlineKeyboardButton(f"⬩➤ {to_bold('PASSWORD')} ▸", callback_data=f"ask_pass:{sid}")
+            InlineKeyboardButton(f"{to_bold('NUMBER')}", callback_data=f"ask_num:{sid}"),
+            InlineKeyboardButton(f"{to_bold('PASSWORD')}", callback_data=f"ask_pass:{sid}")
         )
     else:
         markup.add(
-            InlineKeyboardButton(f"⬩➤ {to_bold('PASSWORD')} ▸", callback_data=f"ask_pass:{sid}")
+            InlineKeyboardButton(f"{to_bold('PASSWORD')}", callback_data=f"ask_pass:{sid}")
         )
-    markup.add(InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}"))
+    markup.add(InlineKeyboardButton(f"{to_bold('CANCEL')}", callback_data=f"cancel:{sid}"))
     return markup
 
 def get_start_screen_keyboard(sid):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_bold('START')} ▸", callback_data=f"start_cfg:{sid}"),
-        InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
+        InlineKeyboardButton(f"{to_bold('START')}", callback_data=f"start_cfg:{sid}"),
+        InlineKeyboardButton(f"{to_bold('CANCEL')}", callback_data=f"cancel:{sid}")
     )
     return markup
 
@@ -240,8 +240,8 @@ def get_setup_param_keyboard(sid):
     t_val = sess.get("target_profit", 0)
     s_val = sess.get("total_steps", 5)
 
-    t_lbl = f"֎ TARGET: ৳{int(t_val)}" if t_val else "֎ TARGET"
-    s_lbl = f"⏣ STEPS: {int(s_val)}" if s_val else "⏣ STEPS"
+    t_lbl = f"TARGET: {int(t_val)}" if t_val else "TARGET"
+    s_lbl = f"STEPS: {int(s_val)}" if s_val else "STEPS"
 
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -249,8 +249,8 @@ def get_setup_param_keyboard(sid):
         InlineKeyboardButton(f"{to_bold(s_lbl)}", callback_data=f"set_stp:{sid}")
     )
     markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_bold('START AUTOMATION')} ▸", callback_data=f"run_auto:{sid}"),
-        InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
+        InlineKeyboardButton(f"{to_bold('START')}", callback_data=f"run_auto:{sid}"),
+        InlineKeyboardButton(f"{to_bold('CANCEL')}", callback_data=f"cancel:{sid}")
     )
     return markup
 
@@ -261,44 +261,44 @@ def get_trading_control_keyboard(sid):
 
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"⪼ {to_bold('SHOT')}", callback_data=f"shot:{sid}"),
-        InlineKeyboardButton(f"⪼ {to_bold('BAL')}", callback_data=f"bal:{sid}")
+        InlineKeyboardButton(f"{to_bold('SHOT')}", callback_data=f"shot:{sid}"),
+        InlineKeyboardButton(f"{to_bold('BAL')}", callback_data=f"bal:{sid}")
     )
     markup.add(
-        InlineKeyboardButton(f"⟡ {to_bold('STATS')}", callback_data=f"stats:{sid}"),
-        InlineKeyboardButton(f"⬩➤ {to_bold(f'STOP {spinner}')} ✦︎", callback_data=f"stop:{sid}")
+        InlineKeyboardButton(f"{to_bold('STATS')}", callback_data=f"stats:{sid}"),
+        InlineKeyboardButton(f"{to_bold(f'STOP {spinner}')}", callback_data=f"stop:{sid}")
     )
     return markup
 
 def get_channel_join_keyboard():
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_bold('JOIN OFFICIAL CHANNEL')} ▸", url=CHANNEL_URL),
-        InlineKeyboardButton(f"✦︎ {to_bold('VERIFY MEMBERSHIP')} ✦︎", callback_data="check_channel_joined")
+        InlineKeyboardButton(f"{to_bold('JOIN OFFICIAL CHANNEL')}", url=CHANNEL_URL),
+        InlineKeyboardButton(f"{to_bold('VERIFY MEMBERSHIP')}", callback_data="check_channel_joined")
     )
     return markup
 
 def get_passkey_gate_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_bold('ENTER PASSKEY')} ▸", callback_data="btn_enter_pass"),
-        InlineKeyboardButton(f"⟡ {to_bold('CONTACT OWNER')} ⟡", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")
+        InlineKeyboardButton(f"{to_bold('ENTER PASSKEY')}", callback_data="btn_enter_pass"),
+        InlineKeyboardButton(f"{to_bold('CONTACT OWNER')}", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")
     )
     return markup
 
 def get_six_platform_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"֎ {to_bold('AMAR CLUB')} ▸", callback_data="site_amarclub"),
-        InlineKeyboardButton(f"֎ {to_bold('DK WIN')} ▸", callback_data="site_dkwin")
+        InlineKeyboardButton(f"{to_bold('AMAR CLUB')}", callback_data="site_amarclub"),
+        InlineKeyboardButton(f"{to_bold('DK WIN')}", callback_data="site_dkwin")
     )
     markup.add(
-        InlineKeyboardButton(f"֎ {to_bold('TIGRO CLUB')} ▸", callback_data="site_tigroclub"),
-        InlineKeyboardButton(f"֎ {to_bold('HG NICE')} ▸", callback_data="site_hgnice")
+        InlineKeyboardButton(f"{to_bold('TIGRO CLUB')}", callback_data="site_tigroclub"),
+        InlineKeyboardButton(f"{to_bold('HG NICE')}", callback_data="site_hgnice")
     )
     markup.add(
-        InlineKeyboardButton(f"֎ {to_bold('KANPUR 91')} ▸", callback_data="site_kanpur91"),
-        InlineKeyboardButton(f"֎ {to_bold('BDG WINS VIP')} ▸", callback_data="site_bdgwinsvip")
+        InlineKeyboardButton(f"{to_bold('KANPUR 91')}", callback_data="site_kanpur91"),
+        InlineKeyboardButton(f"{to_bold('BDG WINS VIP')}", callback_data="site_bdgwinsvip")
     )
     return markup
 
@@ -340,8 +340,7 @@ def find_best_worker():
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict) and tinfo.get("status") in ["FREE", "IDLE"]:
                 hb = float(tinfo.get("heartbeat", 0))
-                # 45-second heartbeat window prevents false offline detection during network jitter
-                if now - hb <= 45.0:
+                if now - hb <= 15.0:
                     lat = float(tinfo.get("latency_ms", 9999.0))
                     load = int(tinfo.get("load", 0))
                     candidates.append((tid, load, lat))
@@ -354,7 +353,7 @@ def find_best_worker():
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict):
                 hb = float(tinfo.get("heartbeat", 0))
-                if now - hb <= 45.0:
+                if now - hb <= 15.0:
                     return tid
     return None
 
@@ -368,77 +367,6 @@ def dispatch_task_to_worker(worker_id, task_payload):
 
 def relay_action_to_worker(worker_id, action_payload):
     firebase_sync_http(f"terminals/{worker_id}/action", "PUT", action_payload)
-
-def try_dispatch_session_to_worker(chat_id, sid):
-    sess = active_sessions.get(sid)
-    if not sess:
-        return
-
-    connecting_text = (
-        f"✦︎ <b>{to_bold('CONNECTING REMOTE WORKER ENGINE')}</b> ﴾ 𝟓𝟏𝟐MB ﴿ ✦︎\n\n"
-        f"֎ Platform: <b>{sess.get('site_name', '')}</b>\n"
-        f"<code>Dispatching session to fastest worker node...</code>"
-    )
-    msg_id = sess.get("last_dashboard_msg_id") or sess.get("cred_card_msg_id")
-    if msg_id:
-        try:
-            bot.edit_message_text(connecting_text, chat_id=chat_id, message_id=msg_id)
-            sess["last_dashboard_msg_id"] = msg_id
-        except Exception:
-            m = bot.send_message(chat_id, connecting_text)
-            sess["last_dashboard_msg_id"] = m.message_id
-    else:
-        m = bot.send_message(chat_id, connecting_text)
-        sess["last_dashboard_msg_id"] = m.message_id
-
-    target_worker = find_best_worker()
-    if not target_worker:
-        retry_markup = InlineKeyboardMarkup(row_width=2)
-        retry_markup.add(
-            InlineKeyboardButton(f"🔄 {to_bold('RETRY WORKER SEARCH')}", callback_data=f"retry_worker:{sid}"),
-            InlineKeyboardButton(f"✦︎ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
-        )
-        caption = (
-            f"✦︎ <b>{to_bold('NO WORKERS AVAILABLE')}</b> ﴾ 𝐖𝐎𝐑𝐊𝐄𝐑 𝐎𝐅𝐅𝐋𝐈𝐍𝐄 ﴿ ✦︎\n\n"
-            f"<b>সমস্যাটির কারণ (Cause of Error):</b>\n"
-            f"ক্লাস্টারে কোনো সক্রিয় <code>worker.py</code> ইনস্ট্যান্স পাওয়া যায়নি।\n\n"
-            f"ম্যানেজার (টেলিগ্রাম বট) এবং ওয়ার্কার (হেডলেস ব্রাউজার ইঞ্জিন) দুটি আলাদা ফাইল। আপনি শুধুমাত্র <code>manager.py</code> চালু রেখেছেন, কিন্তু ব্রাউজারে লগইন ও ট্রেড করার জন্য <code>worker.py</code> চালু করেননি।\n\n"
-            f"<b>সমাধান (Solution):</b>\n"
-            f"১. আরেকটি টার্মিনাল বা ব্যাকগ্রাউন্ড সার্ভিসে কমান্ডটি রান করুন:\n"
-            f"<code>python3 worker.py</code>\n\n"
-            f"২. <code>worker.py</code> চালু হওয়া মাত্র নিচের <b>RETRY</b> বাটনে চাপ দিন (ফোন ও পাসওয়ার্ড পুনরায় দিতে হবে না):"
-        )
-        try:
-            bot.edit_message_text(caption, chat_id=chat_id, message_id=sess["last_dashboard_msg_id"], reply_markup=retry_markup)
-        except Exception:
-            bot.send_message(chat_id, caption, reply_markup=retry_markup)
-        return
-
-    sess["assigned_worker"] = target_worker
-    firebase_sync_http(f"sessions/{sid}", "PUT", {
-        "node_id": target_worker,
-        "chat_id": chat_id,
-        "site_name": sess["site_name"],
-        "login_url": sess["login_url"],
-        "wingo_url": sess["wingo_url"],
-        "phone": sess["phone"],
-        "password": sess["password"],
-        "assigned_at": time.time()
-    })
-
-    task_payload = {
-        "type": "LOGIN_AND_PREPARE",
-        "chat_id": chat_id,
-        "session_id": sid,
-        "site_name": sess["site_name"],
-        "login_url": sess["login_url"],
-        "wingo_url": sess["wingo_url"],
-        "phone": sess["phone"],
-        "password": sess["password"],
-        "anim_msg_id": sess["last_dashboard_msg_id"],
-        "dispatched_at": time.time()
-    }
-    dispatch_task_to_worker(target_worker, task_payload)
 
 # ==============================================================================
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
@@ -521,29 +449,18 @@ def worker_events_listener():
                         elif ev_type == "TARGET_ACHIEVED":
                             start_b = float(ev_data.get("start_balance", 0.0))
                             cur_b = float(ev_data.get("final_balance", 0.0))
-                            tgt = float(ev_data.get("target_amount", cur_b))
                             profit = cur_b - start_b
                             w = ev_data.get("wins", 0)
                             l = ev_data.get("losses", 0)
-                            sess["is_trading"] = False
                             msg = (
-                                f"✦︎ <b>{to_bold('TARGET ACHIEVED')}</b> ﴾ 𝐒𝐔𝐂𝐂𝐄𝐒𝐒 ﴿ ✦︎\n\n"
-                                f"Assalamu Alaikum. Dear Customer, your target profit/balance of <b>৳{int(cur_b)} BDT</b> has been achieved successfully! Automated trading has been safely paused. You may now log in to review and withdraw your funds.\n\n"
-                                f"֎ Starting Balance: <code>৳ {int(start_b)} BDT</code>\n"
-                                f"֎ Target Goal: <code>৳ {int(tgt)} BDT</code>\n"
-                                f"֎ Final Balance: <code>৳ {int(cur_b)} BDT</code>\n"
-                                f"֎ Net Profit: <code>+৳ {int(profit)} BDT</code>\n"
-                                f"֎ Performance: <b>{w}</b> Wins ⪼ <b>{l}</b> Losses\n\n"
-                                f"⬩➤ <i>All instances stopped cleanly. Zero memory leak. Send /start to begin a new session.</i>"
+                                f"<b>{to_bold('TARGET ACHIEVED SUCCESSFULLY')}</b>\n\n"
+                                f"Your target profit has been fulfilled smoothly.\n\n"
+                                f"Starting Balance: <code>৳ {int(start_b)} BDT</code>\n"
+                                f"Final Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+                                f"Net Profit: <code>+৳ {int(profit)} BDT</code>\n"
+                                f"Total Wins: <b>{w}</b> | Losses: <b>{l}</b>"
                             )
-                            last_m = sess.get("last_dashboard_msg_id")
-                            if last_m:
-                                try:
-                                    bot.edit_message_text(msg, chat_id=chat_id, message_id=last_m)
-                                except Exception:
-                                    bot.send_message(chat_id, msg)
-                            else:
-                                bot.send_message(chat_id, msg)
+                            bot.send_message(chat_id, msg)
 
                         elif ev_type == "CIRCUIT_BREAKER_TRIGGERED":
                             site_name = ev_data.get("site_name", "")
@@ -968,10 +885,6 @@ def handle_callbacks(call):
         prompt_m = bot.send_message(chat_id, f"<b>{to_bold('ACCOUNT PASSWORD')}</b>\nEnter your account password:")
         active_sessions[sid]["temp_prompt_id"] = prompt_m.message_id
 
-    elif action == "retry_worker" and sid in active_sessions:
-        bot.answer_callback_query(call.id, "Searching for online worker node...")
-        try_dispatch_session_to_worker(chat_id, sid)
-
     elif action == "start_cfg" and sid in active_sessions:
         sess = active_sessions[sid]
         sess["last_dashboard_msg_id"] = call.message.message_id
@@ -1111,14 +1024,11 @@ def handle_callbacks(call):
                 "chat_id": chat_id
             })
         sess["is_trading"] = False
-        bot.answer_callback_query(call.id, "Trading halted cleanly", show_alert=True)
-        cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
+        bot.answer_callback_query(call.id, "Trading paused cleanly", show_alert=True)
         stop_caption = (
-            f"✦︎ <b>{to_bold('TRADING HALTED')}</b> ﴾ 𝐒𝐓𝐎𝐏𝐏𝐄𝐃 ﴿ ✦︎\n\n"
-            f"֎ Platform: <b>{sess.get('site_name', '')}</b>\n"
-            f"֎ Preserved Balance: <code>৳ {int(cur_b)} BDT</code>\n"
-            f"֎ Status: <b>Memory Cleared & Instance Released</b>\n\n"
-            f"⬩➤ <i>Zero ghost processes. Send /start to initiate a new session.</i>"
+            f"<b>{to_bold('TRADING PAUSED')}</b>\n\n"
+            f"Platform: <b>{sess.get('site_name', '')}</b>\n"
+            f"Automation paused cleanly."
         )
         try:
             bot.edit_message_text(stop_caption, chat_id=chat_id, message_id=call.message.message_id)
@@ -1133,10 +1043,10 @@ def handle_callbacks(call):
                 "session_id": sid,
                 "chat_id": chat_id
             })
-        bot.answer_callback_query(call.id, "Session terminated cleanly")
+        bot.answer_callback_query(call.id, "Session terminated")
         active_sessions.pop(sid, None)
         safe_delete_message(chat_id, call.message.message_id)
-        bot.send_message(chat_id, f"✦︎ <b>{to_bold('SESSION TERMINATED')}</b> ﴾ 𝐂𝐋𝐄𝐀𝐑𝐄𝐃 ﴿ ✦︎\n\n⬩➤ <i>All active async requests aborted and memory freed. Send /start to begin a new session.</i>")
+        bot.send_message(chat_id, f"<b>{to_bold('SESSION TERMINATED')}</b>\nSend /start to begin a new session.")
 
 # ==============================================================================
 # USER TEXT INPUT HANDLER
@@ -1225,7 +1135,60 @@ def handle_user_text(message):
     elif input_mode == "WAITING_PASS":
         sess["password"] = text
         sess["input_mode"] = None
-        try_dispatch_session_to_worker(chat_id, sid)
+
+        cred_msg_id = sess.get("cred_card_msg_id")
+
+        connecting_text = (
+            f"<b>{to_bold('CONNECTING REMOTE WORKER ENGINE')}</b>\n\n"
+            f"Platform: <b>{sess.get('site_name', '')}</b>\n"
+            f"<code>Dispatching session to fastest worker node...</code>"
+        )
+        if cred_msg_id:
+            try:
+                bot.edit_message_text(connecting_text, chat_id=chat_id, message_id=cred_msg_id)
+                sess["last_dashboard_msg_id"] = cred_msg_id
+            except Exception:
+                anim_msg = bot.send_message(chat_id, connecting_text)
+                sess["last_dashboard_msg_id"] = anim_msg.message_id
+        else:
+            anim_msg = bot.send_message(chat_id, connecting_text)
+            sess["last_dashboard_msg_id"] = anim_msg.message_id
+
+        target_worker = find_best_worker()
+        if not target_worker:
+            bot.edit_message_text(
+                f"<b>{to_bold('NO WORKERS AVAILABLE')}</b>\n\n"
+                f"No active worker nodes found in cluster. Please ensure at least one <code>worker.py</code> instance is running.",
+                chat_id=chat_id,
+                message_id=sess["last_dashboard_msg_id"]
+            )
+            return
+
+        sess["assigned_worker"] = target_worker
+        firebase_sync_http(f"sessions/{sid}", "PUT", {
+            "node_id": target_worker,
+            "chat_id": chat_id,
+            "site_name": sess["site_name"],
+            "login_url": sess["login_url"],
+            "wingo_url": sess["wingo_url"],
+            "phone": sess["phone"],
+            "password": sess["password"],
+            "assigned_at": time.time()
+        })
+
+        task_payload = {
+            "type": "LOGIN_AND_PREPARE",
+            "chat_id": chat_id,
+            "session_id": sid,
+            "site_name": sess["site_name"],
+            "login_url": sess["login_url"],
+            "wingo_url": sess["wingo_url"],
+            "phone": sess["phone"],
+            "password": sess["password"],
+            "anim_msg_id": sess["last_dashboard_msg_id"],
+            "dispatched_at": time.time()
+        }
+        dispatch_task_to_worker(target_worker, task_payload)
 
     elif input_mode == "WAITING_TARGET":
         try:
