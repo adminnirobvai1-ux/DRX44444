@@ -658,17 +658,16 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         clearInterval(window.__WINGO_ST.autoInt);
     }
 
-    // Step Maker Algorithm: strictly NO decimals / points (Math.floor)
+    // Step Maker Algorithm: strictly NO decimals / points (Floor Integer)
     const calcSeq = (cBal, nSteps) => {
         let B = Math.floor(Number(cBal)) || 0;
         let n = parseInt(nSteps) || 5;
         if (n < 1) n = 1;
         let sumPowers = Math.pow(2, n) - 1;
-        let firstStep = Math.floor(B / sumPowers);
-        if (firstStep < 1) firstStep = 1;
+        let exactFirst = B / sumPowers;
         let seq = [];
         for (let i = 0; i < n; i++) {
-            let step = Math.floor(firstStep * Math.pow(2, i));
+            let step = Math.floor(exactFirst * Math.pow(2, i));
             if (step < 1) step = 1;
             seq.push(step);
         }
@@ -814,6 +813,17 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             let checkAttempts = 0;
             let valInterval = setInterval(() => {
                 checkAttempts++;
+
+                // Ensure base unit "1" is selected (fixes 10x, 20x, 100x multiplier bug)
+                let unitButtons = document.querySelectorAll('.Betting__C-foot-c button, .Betting__C-foot-c div, .van-button, div[class*="balance" i] button, div[class*="unit" i] span, button');
+                for (let ub of unitButtons) {
+                    let uTxt = (ub.innerText || '').trim();
+                    if (uTxt === '1' && ub.offsetParent && !ub.children.length) {
+                        drx_simClick(ub);
+                        break;
+                    }
+                }
+
                 let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
                 if (inpEl || checkAttempts > 18) {
                     clearInterval(valInterval);
