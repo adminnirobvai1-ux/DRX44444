@@ -54,7 +54,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAENZ6q194QRWsspT5ileXXiwCF4f7GtOnk")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAF0OhrUDqhGEF_u3udxs1vJ1vH3Yntn9Cc")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
@@ -351,35 +351,53 @@ def get_admin_dashboard_keyboard():
     return markup
 
 # ==============================================================================
-# MONOCHROME LOADING ANIMATION ENGINES
+# MONOCHROME LOADING ANIMATION ENGINES (CANCELLABLE & THREAD-SAFE)
 # ==============================================================================
-def play_login_animation(chat_id, msg_id):
-    """Executes multi-frame loading animation during worker allocation and credential injection."""
-    frames = [
-        "<b>⏣ ﴾ ▰▱▱▱▱ ﴿ ⬩➤ ₂₀% ✧ ALLOCATING WORKER NODE</b>\n<code>▸ Connecting to fastest cluster terminal...</code>",
-        "<b>✧ ﴾ ▰▰▰▱▱ ﴿ ⬩➤ ₆₀% ✧ INJECTING ENCRYPTED CREDENTIALS</b>\n<code>▸ Resolving Error 22 & dismissing popups...</code>",
-        "<b>✦︎ ﴾ ▰▰▰▰▰ ﴿ ⬩➤ ₁₀₀% ✧ AUTHENTICATION VERIFIED</b>\n<code>▸ Clean session established. Preparing telemetry...</code>"
-    ]
-    for frame in frames:
-        try:
-            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id)
-        except Exception:
-            pass
-        time.sleep(0.4)
+active_login_animations = {}
+active_prep_animations = {}
 
-def play_market_prep_animation(chat_id, msg_id):
-    """Executes loading animation when preparing WinGo 30S market."""
+def play_login_animation(chat_id, msg_id, sid):
+    """Executes multi-frame loading animation during worker allocation and credential injection."""
+    stop_event = threading.Event()
+    active_login_animations[sid] = stop_event
+
     frames = [
-        "<b>⏣ ﴾ ▰▰▱▱▱ ﴿ ⬩➤ ₄₀% ✧ NAVIGATING WINGO 30S</b>\n<code>▸ Connecting persistent SaasLottery stream...</code>",
-        "<b>✧ ﴾ ▰▰▰▰▱ ﴿ ⬩➤ ₈₀% ✧ STEP MAKER COMPUTING</b>\n<code>▸ Calculating dynamic integer sequence without fractions...</code>",
-        "<b>✦︎ ﴾ ▰▰▰▰▰ ﴿ ⬩➤ ₁₀₀% ✧ MARKET ARMED</b>\n<code>▸ Wallet balance synchronized. Ready to trade.</code>"
+        "<b>⏣ ﴾ ▰▱▱▱▱▱▱▱ ﴿ ⬩➤ ₁₅% ✧ ALLOCATING WORKER NODE</b>\n<code>▸ Connecting to fastest cluster terminal...</code>",
+        "<b>✧ ﴾ ▰▰▱▱▱▱▱▱ ﴿ ⬩➤ ₃₅% ✧ INJECTING ENCRYPTED CREDENTIALS</b>\n<code>▸ Resolving Error 22 & dismissing popups...</code>",
+        "<b>✧ ﴾ ▰▰▰▰▱▱▱▱ ﴿ ⬩➤ ₆₀% ✧ BYPASSING MODALS & POPUPS</b>\n<code>▸ Handling session takeover clean handshake...</code>",
+        "<b>✦︎ ﴾ ▰▰▰▰▰▰▱▱ ﴿ ⬩➤ ₈₅% ✧ SYNCHRONIZING SESSION TOKEN</b>\n<code>▸ Authenticating account credentials...</code>",
+        "<b>✦︎ ﴾ ▰▰▰▰▰▰▰▰ ﴿ ⬩➤ ₉₉% ✧ VERIFYING WALLET TELEMETRY</b>\n<code>▸ Waiting for worker confirmation...</code>"
     ]
     for frame in frames:
+        if stop_event.is_set():
+            break
         try:
             bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id)
         except Exception:
             pass
-        time.sleep(0.4)
+        if stop_event.wait(0.5):
+            break
+
+def play_market_prep_animation(chat_id, msg_id, sid):
+    """Executes loading animation when preparing WinGo 30S market."""
+    stop_event = threading.Event()
+    active_prep_animations[sid] = stop_event
+
+    frames = [
+        "<b>⏣ ﴾ ▰▱▰▱▰▱▰▱ ﴿ ⬩➤ ₂₅% ✧ NAVIGATING WINGO 30S</b>\n<code>▸ Connecting persistent SaasLottery stream...</code>",
+        "<b>✧ ﴾ ▰▰▰▰▱▱▱ ﴿ ⬩➤ ₅₀% ✧ STEP MAKER COMPUTING</b>\n<code>▸ Calculating dynamic integer sequence without fractions...</code>",
+        "<b>✦︎ ﴾ ▰▰▰▰▰▰▰ ﴿ ⬩➤ ₇₅% ✧ SYNCING WALLET BALANCE</b>\n<code>▸ Verifying live balance & market readiness...</code>",
+        "<b>✦︎ ﴾ ▰▰▰▰▰▰▰▰ ﴿ ⬩➤ ₁₀₀% ✧ MARKET ARMED</b>\n<code>▸ Live balance synchronized. Ready to trade.</code>"
+    ]
+    for frame in frames:
+        if stop_event.is_set():
+            break
+        try:
+            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id)
+        except Exception:
+            pass
+        if stop_event.wait(0.5):
+            break
 
 # ==============================================================================
 # WORKER DISPATCH & LOAD BALANCER ENGINE
@@ -440,6 +458,11 @@ def worker_events_listener():
                         sess = active_sessions.get(sid, {})
 
                         if ev_type == "LOGIN_SUCCESS":
+                            stop_ev = active_login_animations.pop(sid, None)
+                            if stop_ev:
+                                stop_ev.set()
+                            time.sleep(0.15)
+
                             phone = ev_data.get("phone", "")
                             site_name = ev_data.get("site_name", "")
                             masked_phone = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
@@ -462,6 +485,11 @@ def worker_events_listener():
                                 sess["last_dashboard_msg_id"] = msg.message_id
 
                         elif ev_type == "LOGIN_FAILED":
+                            stop_ev = active_login_animations.pop(sid, None)
+                            if stop_ev:
+                                stop_ev.set()
+                            time.sleep(0.15)
+
                             site_name = ev_data.get("site_name", "")
                             err_reason = ev_data.get("reason", "Unknown error")
                             fail_caption = (
@@ -480,6 +508,11 @@ def worker_events_listener():
                                 bot.send_message(chat_id, fail_caption)
 
                         elif ev_type == "WINGO_READY":
+                            prep_ev = active_prep_animations.pop(sid, None)
+                            if prep_ev:
+                                prep_ev.set()
+                            time.sleep(0.15)
+
                             site_name = ev_data.get("site_name", "")
                             live_bal = float(ev_data.get("live_balance", 0.0))
                             sess["current_balance"] = live_bal
@@ -924,7 +957,7 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id, "Preparing WinGo 30S market...")
 
         # Play multi-frame market preparation animation
-        threading.Thread(target=play_market_prep_animation, args=(chat_id, call.message.message_id), daemon=True).start()
+        threading.Thread(target=play_market_prep_animation, args=(chat_id, call.message.message_id, sid), daemon=True).start()
 
         assigned_worker = sess.get("assigned_worker")
         if assigned_worker:
@@ -1182,7 +1215,7 @@ def handle_user_text(message):
             sess["last_dashboard_msg_id"] = anim_msg.message_id
 
         # Play multi-frame login loading animation
-        threading.Thread(target=play_login_animation, args=(chat_id, sess["last_dashboard_msg_id"]), daemon=True).start()
+        threading.Thread(target=play_login_animation, args=(chat_id, sess["last_dashboard_msg_id"], sid), daemon=True).start()
 
         target_worker = find_best_worker()
         if not target_worker:
