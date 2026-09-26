@@ -59,7 +59,7 @@ import psutil
 # ==============================================================================
 # WORKER CONFIGURATION & CLUSTER REGISTRY
 # ==============================================================================
-FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://server-51888-default-rtdb.firebaseio.com")
+FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 NODE_ID = f"worker_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
@@ -1269,9 +1269,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 })
                 break
 
-            # Absolute Target Balance Threshold Evaluation
-            # Immediately cease all automated betting operations when balance hits or exceeds target
-            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt:
+            # Check if target profit is genuinely reached
+            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0 and sess["cur_bal"] > start_b:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
                 firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
@@ -1282,12 +1281,9 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     "site_name": site_name,
                     "start_balance": start_b,
                     "final_balance": sess["cur_bal"],
-                    "target_amount": tgt_amt,
                     "wins": sess["wins"],
                     "losses": sess["losses"]
                 })
-                # Immediately destroy browser session tab to free allocated RAM under 512MB
-                close_session_tab(sid)
                 break
             elif not is_run:
                 sess["is_trading"] = False
@@ -1449,36 +1445,11 @@ def worker_task_listener():
                         })
 
                 elif kind == "STOP_TRADING" and sid in active_sessions:
-                    # Emergency / Routine Stop: Halt trading loop, destroy active instances, fully release memory
-                    safe_tab_execute(sid, lambda drv: drv.execute_script("""
-                        if (window.__WINGO_ST) {
-                            window.__WINGO_ST.isRun = false;
-                            window.__WINGO_ST.isTrd = false;
-                            if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
-                        }
-                        try { window.stop(); } catch(e){}
-                    """))
-                    close_session_tab(sid)
-                    emit_event_to_manager("STOP_CONFIRMED", {
-                        "session_id": sid,
-                        "chat_id": chat_id
-                    })
+                    safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); }"))
+                    active_sessions[sid]["is_trading"] = False
 
                 elif kind == "CANCEL_SESSION" and sid in active_sessions:
-                    # Instantly abort active async requests, destroy browser tabs/headless contexts, terminate calls, and clear user session data
-                    safe_tab_execute(sid, lambda drv: drv.execute_script("""
-                        if (window.__WINGO_ST) {
-                            window.__WINGO_ST.isRun = false;
-                            window.__WINGO_ST.isTrd = false;
-                            if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
-                        }
-                        try { window.stop(); } catch(e){}
-                    """))
                     close_session_tab(sid)
-                    emit_event_to_manager("CANCEL_CONFIRMED", {
-                        "session_id": sid,
-                        "chat_id": chat_id
-                    })
 
         except Exception as e:
             logger.debug(f"Worker task loop tick: {e}")
