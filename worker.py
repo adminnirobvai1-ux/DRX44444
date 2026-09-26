@@ -2,15 +2,13 @@
 # ==============================================================================
 # DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড)
 # ==============================================================================
-# Features:
+# Responsibilities:
 # - Connects to Firebase RTDB and registers as an active worker terminal
 # - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
 # - Performs auto-login across 6 platforms, resolves Error 22 auto-takeover
 # - Dismisses modals & USDT bonus announcements continuously
 # - Executes 24/7 invisible ghost martingale trading engine (WinGo 30S)
-# - Exact Step Maker: Floor integer doubling sequence (2, 4, 8, 16, 32...)
-# - Full paisa balance displayed (e.g. 600.84 ৳), but paisa dropped for step math
-# - Ultra-low RAM profile (<150 MB) optimized for Railway 0.5 GB RAM
+# - Robust 24/7 execution: never stops auto-trade on balance checks or status queries
 # ==============================================================================
 
 import os
@@ -212,7 +210,7 @@ def cleanup_zombie_browsers():
         pass
 
 # ==============================================================================
-# HARDENED BROWSER SESSION ISOLATION (ZERO CRASH & LOW RAM PROFILE)
+# HARDENED BROWSER SESSION ISOLATION (ZERO CRASH & LOW RAM)
 # ==============================================================================
 def allocate_session_tab(session_id, target_url):
     sess = active_sessions.get(session_id)
@@ -230,6 +228,7 @@ def allocate_session_tab(session_id, target_url):
     if HEADLESS_MODE:
         options.add_argument("--headless")
 
+    # Critical Container Stability Flags (Prevents Status 0 Crash on Railway/Docker/Linux)
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -240,21 +239,14 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # Ultra-low 0.5 GB (512 MB) RAM profile
-    options.set_preference("permissions.default.image", 2)  # Disables image downloads (saves 150-200MB RAM)
-    options.set_preference("permissions.default.stylesheet", 1)
-    options.set_preference("browser.display.use_document_fonts", 0)  # Disables web font downloads
-    options.set_preference("media.autoplay.default", 5)  # Disables audio/video autoplay
-    options.set_preference("media.volume_scale", "0.0")
-    options.set_preference("dom.ipc.processCount", 1)  # Strictly single content process (saves 100MB+ RAM)
-    options.set_preference("browser.sessionhistory.max_entries", 1)
+    # Low RAM & Anti-Freeze Tuning
+    options.set_preference("dom.ipc.processCount", 1)
+    options.set_preference("browser.sessionhistory.max_entries", 2)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
-    options.set_preference("image.mem.surfacecache.max_size_kb", 512)
-    options.set_preference("javascript.options.mem.max", 24576)  # Limit JS heap to 24MB
-    options.set_preference("javascript.options.mem.high_water_mark", 18)
+    options.set_preference("image.mem.surfacecache.max_size_kb", 1024)
+    options.set_preference("javascript.options.mem.max", 32768)
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", True)
-    options.set_preference("browser.cache.memory.capacity", 8192)  # 8MB memory cache
     options.set_preference("network.http.use-cache", False)
     options.set_preference("network.prefetch-next", False)
     options.set_preference("webgl.disabled", True)
@@ -264,7 +256,6 @@ def allocate_session_tab(session_id, target_url):
     options.set_preference("dom.popup_maximum", 0)
     options.set_preference("media.peerconnection.enabled", False)
     options.set_preference("media.navigator.enabled", False)
-    options.set_preference("layout.frame_rate", 10)  # Limits headless render loop to 10 FPS (cuts CPU load)
 
     service = FirefoxService(log_output=os.devnull)
     driver = webdriver.Firefox(service=service, options=options)
@@ -295,6 +286,7 @@ def safe_tab_execute(sid, task_fn, timeout=25.0):
     if not driver or not lock:
         return None
 
+    # Acquire lock without blocking indefinitely
     acquired = lock.acquire(timeout=6.0)
     if not acquired:
         return None
@@ -319,7 +311,7 @@ def safe_tab_execute(sid, task_fn, timeout=25.0):
         pass
 
     if not result_container["completed"]:
-        logger.warning(f"Tab execution tick exceeded {timeout}s on sid: {sid}, resuming...")
+        logger.warning(f"Tab execution took longer than {timeout}s on sid: {sid}, resuming...")
         return None
 
     gc.collect()
@@ -360,11 +352,12 @@ def close_session_tab(session_id):
     gc.collect()
 
 # ==============================================================================
-# INJECTED JAVASCRIPT AUTOMATION & MODAL DISMISSER
+# INJECTED JAVASCRIPT AUTOMATION (EXACT LOGIC PRESERVED)
 # ==============================================================================
 MODAL_AUTO_DISMISSER_JS = """
 (function(){
     const sweepModals = () => {
+        // Specifically kill Announcement & USDT Bonus Popups
         const targetBonusDialogs = document.querySelectorAll('.announcement-box, .dialog-box, .bonus-dialog, .van-popup, .van-dialog');
         targetBonusDialogs.forEach(dialog => {
             const txt = (dialog.innerText || '').toLowerCase();
@@ -528,12 +521,75 @@ if (toast && toast.innerText && toast.innerText.trim().length > 0) {
 return { status: "PENDING" };
 """
 
+WINGO_PERSISTENT_NAV_JS = """
+const targetUrl = arguments[0];
+
+(function(){
+    document.querySelectorAll('.announcement-box, .bonus-dialog, .van-overlay, .van-dialog').forEach(el => {
+        try {
+            const btn = el.querySelector('button, .van-button--primary');
+            if (btn) btn.click();
+            el.remove();
+        } catch(e){}
+    });
+
+    const currentHash = window.location.hash || '';
+    const currentHref = window.location.href || '';
+    const bodyTxt = document.body ? document.body.innerText : '';
+
+    if (currentHash.includes('WinGo') || currentHref.includes('WinGo') || bodyTxt.includes('Time remaining') || bodyTxt.includes('30S') || bodyTxt.includes('Win Go')) {
+        return "ALREADY_VERIFIED";
+    }
+
+    try {
+        if (!window.location.href.includes('WinGo')) {
+            window.location.href = targetUrl;
+        }
+    } catch(e){}
+
+    const s = [
+        'img[src*="wingo" i]', 'img[alt*="wingo" i]',
+        'body > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(7) > div:nth-of-type(3) > div > div:nth-of-type(2) > div > div > div > img',
+        'body > div > div:nth-of-type(3) > div:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(3) > div > div > div > img',
+        'body > div > div:nth-of-type(2) > div:nth-of-type(5) > div:nth-of-type(2) > div > div',
+        'div[class*="lottery" i]', 'div[class*="wingo" i]'
+    ];
+    for (let i = 0; i < s.length; i++) {
+        let el = document.querySelector(s[i]);
+        if (el && el.offsetParent !== null) {
+            ['pointerdown','mousedown','mouseup','click'].forEach(evt => {
+                try { el.dispatchEvent(new MouseEvent(evt, {bubbles:true, cancelable:true, view:window})); } catch(err){}
+            });
+            try { el.click(); } catch(err){}
+            return "CLICKED_SELECTOR";
+        }
+    }
+
+    return "NAV_INJECTED";
+})();
+"""
+
+CHECK_WINGO_READY_JS = """
+const hash = window.location.hash || '';
+const href = window.location.href || '';
+const bodyText = document.body ? document.body.innerText : '';
+
+document.querySelectorAll('.van-dialog__confirm, .dialog-close, .van-popup__close-icon, button[class*="close" i], .van-dialog button').forEach(btn => {
+    try { btn.click(); } catch(e){}
+});
+
+if (hash.includes('WinGo') || href.includes('WinGo') || bodyText.includes('Win Go') || bodyText.includes('30S') || bodyText.includes('Time remaining')) {
+    return true;
+}
+return false;
+"""
+
 FETCH_BALANCE_JS = r"""
 let targetedEls = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
 for (let i = 0; i < targetedEls.length; i++) {
     let txt = targetedEls[i].innerText || '';
     let match = txt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
-    if (match) return Math.round(parseFloat(match[1].replace(/,/g, '')) * 100) / 100;
+    if (match) return parseFloat(match[1].replace(/,/g, ''));
 }
 let els = document.querySelectorAll('span, div, p');
 for (let i = 0; i < els.length; i++) {
@@ -541,20 +597,20 @@ for (let i = 0; i < els.length; i++) {
     if (txt.includes('Wallet balance') || txt.includes('Balance')) {
         let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
         let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
-        if (match) return Math.round(parseFloat(match[1].replace(/,/g, '')) * 100) / 100;
+        if (match) return parseFloat(match[1].replace(/,/g, ''));
     }
 }
 for (let i = 0; i < els.length; i++) {
     let txt = els[i].innerText || '';
     if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
-        return Math.round(parseFloat(txt.replace(/[^\d.]/g, '')) * 100) / 100;
+        return parseFloat(txt.replace(/[^\d.]/g, ''));
     }
 }
 return 0;
 """
 
 # ==============================================================================
-# INTEGRATED 24/7 INVISIBLE GHOST STEP MAKER TRADING ENGINE
+# INTEGRATED 24/7 INVISIBLE GHOST TRADING ENGINE (NEVER STOPS PREMATURELY)
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetProfit = arguments[0];
@@ -586,29 +642,12 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         clearInterval(window.__WINGO_ST.autoInt);
     }
 
-    // Step Maker Algorithm: Exact integer doubling sequence (e.g. 2, 4, 8, 16, 32 or 3, 6, 12, 24, 48)
-    // Drops all paisa/decimals for step math (B = Math.floor(cBal))
-    const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 0;
-        let n = parseInt(nSteps) || 5;
-        if (n < 1) n = 1;
-        let sumPowers = Math.pow(2, n) - 1;
-        let firstStep = Math.floor(B / sumPowers);
-        if (firstStep < 1) firstStep = 1;
-        let seq = [];
-        for (let i = 0; i < n; i++) {
-            seq.push(firstStep * Math.pow(2, i));
-        }
-        return seq;
-    };
-
     const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
     const st = {
         isRun: true,
         targetProfit: parseFloat(autoTargetProfit) || 0,
         tgtAmt: 0,
         startBal: 0,
-        baseBal: 0,
         curBal: 0,
         autoInt: null,
         isTrd: false,
@@ -627,18 +666,18 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     };
     window.__WINGO_ST = st;
 
-    // Preserves full paisa precision for display (e.g. 600.84)
     function chkBal() {
         try {
+            // Fast targeted balance query to prevent any DOM reflow freeze
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
             for (let i = 0; i < targeted.length; i++) {
                 let txt = targeted[i].innerText || '';
                 let match = txt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
                 if (match) {
-                    let num = parseFloat(match[1].replace(/,/g, ''));
+                    let num = Math.floor(parseFloat(match[1].replace(/,/g, '')));
                     if (num > 0) {
-                        st.curBal = Math.round(num * 100) / 100;
-                        return st.curBal;
+                        st.curBal = num;
+                        return num;
                     }
                 }
             }
@@ -649,7 +688,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
                     let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
                     if (match) {
-                        st.curBal = Math.round(parseFloat(match[1].replace(/,/g, '')) * 100) / 100;
+                        st.curBal = Math.floor(parseFloat(match[1].replace(/,/g, '')));
                         return st.curBal;
                     }
                 }
@@ -657,7 +696,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             for (let i = 0; i < els.length; i++) {
                 let txt = els[i].innerText || '';
                 if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
-                    st.curBal = Math.round(parseFloat(txt.replace(/[^\d.]/g, '')) * 100) / 100;
+                    st.curBal = Math.floor(parseFloat(txt.replace(/[^\d.]/g, '')));
                     return st.curBal;
                 }
             }
@@ -665,22 +704,34 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         return st.curBal || 0;
     }
 
+    // WinGo 30s Countdown Inspector to bypass betting in the 5-second freeze
     function getRemainingSeconds() {
         try {
-            let timeEl = document.querySelector('.time-box, [class*="time" i], .Time, .countdown, [class*="countdown" i]');
+            let timeEl = document.querySelector('.time-box, [class*="time" i], .Time');
             if (timeEl) {
                 let txt = timeEl.innerText || '';
                 let m = txt.match(/(\d+)\s*:\s*(\d+)/);
                 if (m) {
                     return (parseInt(m[1]) * 60) + parseInt(m[2]);
-                } else {
-                    let d = txt.replace(/\D/g, '');
-                    if (d.length >= 1) return parseInt(d);
                 }
             }
         } catch(e){}
         return 30;
     }
+
+    const calcSeq = (cBal, nSteps) => {
+        let B = Math.floor(Number(cBal)) || 0;
+        let n = parseInt(nSteps) || 5;
+        if (n < 1) n = 1;
+        let u = Math.pow(2, n) - 1;
+        let s1 = Math.floor(B / u);
+        if (s1 < 1) s1 = 1;
+        let seq = [];
+        for (let i = 0; i < n; i++) {
+            seq.push(Math.floor(s1 * Math.pow(2, i)));
+        }
+        return seq;
+    };
 
     const getNextLivePeriod = (str) => {
         let chars = String(str).split('');
@@ -713,6 +764,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
 
     const exeTrd = (pred, amt, cb) => {
         try {
+            // Guard: Never place bet during locked last 5 seconds
             let remSec = getRemainingSeconds();
             if (remSec <= 5 && remSec > 0) {
                 if (cb) cb(false);
@@ -724,7 +776,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             let btns = document.querySelectorAll('button, div, span');
             for (let i = 0; i < btns.length; i++) {
                 let t = (btns[i].innerText || '').trim().toLowerCase();
-                if ((t === targetText || t.startsWith(targetText + ' ') || t.endsWith(' ' + targetText)) && btns[i].offsetParent && btns[i].offsetWidth > 15) {
+                if (t === targetText && btns[i].offsetParent && !btns[i].children.length) {
                     btn = btns[i];
                     break;
                 }
@@ -745,18 +797,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             let checkAttempts = 0;
             let valInterval = setInterval(() => {
                 checkAttempts++;
-
-                // Ensure base unit "1" is selected (fixes 10x, 20x, 100x multiplier bug)
-                let unitButtons = document.querySelectorAll('.Betting__C-foot-c button, .Betting__C-foot-c div, .van-button, div[class*="balance" i] button, div[class*="unit" i] span, button');
-                for (let ub of unitButtons) {
-                    let uTxt = (ub.innerText || '').trim();
-                    if (uTxt === '1' && ub.offsetParent && ub.offsetWidth > 10) {
-                        drx_simClick(ub);
-                        break;
-                    }
-                }
-
-                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric']");
+                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
                 if (inpEl || checkAttempts > 18) {
                     clearInterval(valInterval);
                     if (inpEl) {
@@ -774,7 +815,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                             let docButtons = document.querySelectorAll('button, div[role="button"]');
                             for (let b of docButtons) {
                                 let txt = (b.innerText || '').toLowerCase();
-                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent && b.offsetWidth > 20) {
+                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
                                     dEl = b;
                                     break;
                                 }
@@ -797,14 +838,13 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
-    st.baseBal = initialBal > 0 ? initialBal : 100;
     if (initialBal > 0 && st.targetProfit > 0) {
         st.tgtAmt = initialBal + st.targetProfit;
     } else {
-        st.tgtAmt = 0;
+        st.tgtAmt = 0; // Calculated dynamically once real positive balance is confirmed
     }
 
-    st.dynSeq = calcSeq(st.baseBal, st.steps);
+    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : 100, st.steps);
     st.stpIdx = 0;
     sessionStorage.removeItem('drx_sig');
 
@@ -819,14 +859,13 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             if (liveB > 0) {
                 if (st.startBal <= 0) {
                     st.startBal = liveB;
-                    st.baseBal = liveB;
-                    st.dynSeq = calcSeq(st.baseBal, st.steps);
                     if (st.targetProfit > 0) {
                         st.tgtAmt = st.startBal + st.targetProfit;
                     }
                 }
             }
 
+            // ONLY terminate if real target profit is legitimately reached above starting balance
             if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0 && st.curBal > st.startBal) {
                 st.isRun = false;
                 st.isTrd = false;
@@ -845,6 +884,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
                 let histArray = rawJson.history || (rawJson.data && rawJson.data.history) || [];
 
+                // Support array / data-vip format
                 if (!nextObj && Array.isArray(rawJson) && rawJson[0]) {
                     let first = rawJson[0];
                     if (first.next) {
@@ -871,6 +911,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     let sSig = sessionStorage.getItem('drx_sig');
 
                     if (cSig && cSig !== sSig) {
+                        // Previous bet result evaluation
                         if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
                             let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastPeriod)) || histArray[0];
                             let won = false;
@@ -906,22 +947,16 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                                 st.cur_w_streak++;
                                 st.cur_l_streak = 0;
                                 if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                                // Reset step index to step 1 on WIN
                                 st.stpIdx = 0;
-
-                                // If account balance increased, dynamically recalculate sequence for the higher capital
-                                let freshBal = chkBal();
-                                if (freshBal > st.baseBal) {
-                                    st.baseBal = freshBal;
-                                    st.dynSeq = calcSeq(st.baseBal, st.steps);
-                                }
+                                let nBal = chkBal();
+                                if (nBal > 0) st.curBal = nBal;
+                                st.dynSeq = calcSeq(st.curBal > 0 ? st.curBal : 100, st.steps);
                             } else {
                                 st.l++;
                                 st.cur_l_streak++;
                                 st.cur_w_streak = 0;
                                 if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-                                // On loss: strictly advance step index without shrinking step amount
-                                st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
+                                st.stpIdx = Math.min(st.stpIdx + 1, (st.dynSeq.length > 0 ? st.dynSeq.length - 1 : st.steps - 1));
                             }
                         }
 
@@ -938,9 +973,16 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                             return;
                         }
 
-                        // Ensure step index stays in bounds
+                        if (!st.dynSeq || st.dynSeq.length === 0) {
+                            st.dynSeq = calcSeq(nBal > 0 ? nBal : 100, st.steps);
+                        }
                         if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
                         let tAmt = st.dynSeq[st.stpIdx] || 1;
+
+                        if (nBal > 0 && nBal < tAmt) {
+                            st.stpIdx = 0;
+                            tAmt = st.dynSeq[0] || 1;
+                        }
 
                         let rawPred = (nextObj && (nextObj.size || nextObj.pred)) ||
                                       rawJson.size ||
@@ -1065,6 +1107,7 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         })
         return
 
+    # Sweep USDT bonus immediately
     safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
     time.sleep(1.0)
 
@@ -1081,17 +1124,26 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
     if not sess:
         return
 
-    try:
-        safe_tab_execute(sid, lambda drv: drv.get(wingo_url), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"Nav get error for {wingo_url}: {e}")
+    verified = False
+    for _ in range(15):
+        safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
+        safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_PERSISTENT_NAV_JS, wingo_url))
+        time.sleep(2.0)
 
-    time.sleep(1.5)
-    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS), timeout=4.0)
+        is_ready = safe_tab_execute(sid, lambda drv: drv.execute_script(CHECK_WINGO_READY_JS))
+        if is_ready:
+            verified = True
+            break
+        time.sleep(1.0)
+
+    if not verified:
+        safe_tab_execute(sid, lambda drv: drv.get(wingo_url))
+        time.sleep(3.0)
+        safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
 
     current_bal = 0.0
-    for _ in range(8):
-        bal = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS), timeout=3.0)
+    for _ in range(15):
+        bal = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS))
         if bal and float(bal) > 0:
             current_bal = float(bal)
             break
@@ -1099,7 +1151,7 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
 
     sess["current_balance"] = current_bal
     sess["cur_bal"] = current_bal
-    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS), timeout=3.0)
+    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
 
     emit_event_to_manager("WINGO_READY", {
         "session_id": sid,
@@ -1122,18 +1174,11 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         curBal: window.__WINGO_ST.curBal || 0,
                         tgtAmt: window.__WINGO_ST.tgtAmt || 0,
                         startBal: window.__WINGO_ST.startBal || 0,
-                        baseBal: window.__WINGO_ST.baseBal || 0,
                         targetProfit: window.__WINGO_ST.targetProfit || 0,
                         w: window.__WINGO_ST.w || 0,
                         l: window.__WINGO_ST.l || 0,
                         step: (window.__WINGO_ST.stpIdx || 0) + 1,
-                        steps: window.__WINGO_ST.steps || 5,
-                        dynSeq: window.__WINGO_ST.dynSeq || [],
-                        tradesDone: window.__WINGO_ST.tradesDone || 0,
-                        cur_w_streak: window.__WINGO_ST.cur_w_streak || 0,
-                        cur_l_streak: window.__WINGO_ST.cur_l_streak || 0,
-                        max_w_streak: window.__WINGO_ST.max_w_streak || 0,
-                        max_l_streak: window.__WINGO_ST.max_l_streak || 0
+                        tradesDone: window.__WINGO_ST.tradesDone || 0
                     };
                 }
                 return null;
@@ -1146,9 +1191,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             sess["current_balance"] = sess["cur_bal"]
             sess["wins"] = js_data.get("w", 0)
             sess["losses"] = js_data.get("l", 0)
-            sess["step"] = js_data.get("step", 1)
-            sess["total_steps"] = js_data.get("steps", 5)
-            sess["dynSeq"] = js_data.get("dynSeq", [])
             tgt_amt = js_data.get("tgtAmt", 0)
             start_b = js_data.get("startBal") or sess.get("start_bal", 0)
             is_run = js_data.get("isRun", False)
@@ -1163,11 +1205,11 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "target_amount": tgt_amt,
                 "wins": sess["wins"],
                 "losses": sess["losses"],
-                "step": sess["step"],
                 "updated_at": time.time()
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
+            # Check if target profit is genuinely reached
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0 and sess["cur_bal"] > start_b:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
@@ -1187,7 +1229,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 sess["is_trading"] = False
                 break
 
-        time.sleep(3.0)
+        time.sleep(4.0)
 
 # ==============================================================================
 # WORKER TASK AND ACTION LISTENER LOOP
@@ -1250,8 +1292,8 @@ def worker_task_listener():
 
                 elif kind == "START_TRADING" and sid in active_sessions:
                     sess = active_sessions[sid]
-                    target_profit = float(action_pkt.get("target_profit", 0))
-                    total_steps = int(action_pkt.get("total_steps", 5))
+                    target_profit = action_pkt.get("target_profit", 0)
+                    total_steps = action_pkt.get("total_steps", 5)
                     pred_url = action_pkt.get("prediction_api_url") or PREDICTION_API_URL
                     sess["is_trading"] = True
                     sess["target_profit"] = target_profit
@@ -1276,18 +1318,13 @@ def worker_task_listener():
                                     tgtAmt: window.__WINGO_ST.tgtAmt || 0,
                                     w: window.__WINGO_ST.w || 0,
                                     l: window.__WINGO_ST.l || 0,
-                                    step: (window.__WINGO_ST.stpIdx || 0) + 1,
-                                    steps: window.__WINGO_ST.steps || 5,
-                                    dynSeq: window.__WINGO_ST.dynSeq || []
+                                    step: (window.__WINGO_ST.stpIdx || 0) + 1
                                 };
                             }
                             return null;
                         """)
                     tel_data = safe_tab_execute(sid, _tel)
                     if tel_data:
-                        step_num = tel_data.get("step", 1)
-                        dyn_s = tel_data.get("dynSeq", [])
-                        step_amt = dyn_s[step_num - 1] if step_num <= len(dyn_s) else 0
                         emit_event_to_manager("LIVE_TELEMETRY", {
                             "session_id": sid,
                             "chat_id": chat_id,
@@ -1296,13 +1333,13 @@ def worker_task_listener():
                             "target_total": tel_data.get("tgtAmt", 0),
                             "wins": tel_data.get("w", 0),
                             "losses": tel_data.get("l", 0),
-                            "step": step_num,
-                            "step_amt": step_amt
+                            "step": tel_data.get("step", 1)
                         })
 
                 elif kind == "REQUEST_BALANCE" and sid in active_sessions:
                     sess = active_sessions[sid]
                     def _b(drv):
+                        # Fast memory read first
                         b = drv.execute_script("return (window.__WINGO_ST && window.__WINGO_ST.curBal) ? window.__WINGO_ST.curBal : null;")
                         if b is None or float(b) == 0:
                             b = drv.execute_script(FETCH_BALANCE_JS)
@@ -1350,10 +1387,6 @@ def worker_task_listener():
                 elif kind == "STOP_TRADING" and sid in active_sessions:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); }"))
                     active_sessions[sid]["is_trading"] = False
-                    logger.info(f"Trading stopped cleanly for session: {sid}")
-
-                elif kind == "CANCEL_PREPARE" and sid in active_sessions:
-                    logger.info(f"Market preparation cancelled by user for session: {sid}")
 
                 elif kind == "CANCEL_SESSION" and sid in active_sessions:
                     close_session_tab(sid)
