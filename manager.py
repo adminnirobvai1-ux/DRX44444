@@ -54,7 +54,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAF0OhrUDqhGEF_u3udxs1vJ1vH3Yntn9Cc")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAFgonhb4quDwX6cbWrXLhkF0vOvoSnVbtE")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
@@ -258,6 +258,16 @@ def get_start_screen_keyboard(sid):
     )
     return markup
 
+def get_prep_keyboard(sid):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(f"▸ {to_bold('CANCEL (ক্যানসেল)')}", callback_data=f"cancel_prep:{sid}"))
+    return markup
+
+def get_login_loading_keyboard(sid):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(f"▸ {to_bold('CANCEL (ক্যানসেল)')}", callback_data=f"cancel_login:{sid}"))
+    return markup
+
 def get_setup_param_keyboard(sid):
     sess = active_sessions.get(sid, {})
     t_val = sess.get("target_profit", 0)
@@ -372,7 +382,7 @@ def play_login_animation(chat_id, msg_id, sid):
         if stop_event.is_set():
             break
         try:
-            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id)
+            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id, reply_markup=get_login_loading_keyboard(sid))
         except Exception:
             pass
         if stop_event.wait(0.5):
@@ -393,7 +403,7 @@ def play_market_prep_animation(chat_id, msg_id, sid):
         if stop_event.is_set():
             break
         try:
-            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id)
+            bot.edit_message_text(frame, chat_id=chat_id, message_id=msg_id, reply_markup=get_prep_keyboard(sid))
         except Exception:
             pass
         if stop_event.wait(0.5):
@@ -956,16 +966,34 @@ def handle_callbacks(call):
         sess["last_dashboard_msg_id"] = call.message.message_id
         bot.answer_callback_query(call.id, "Preparing WinGo 30S market...")
 
-        # Play multi-frame market preparation animation
+        # Play multi-frame market preparation animation with Cancel button
         threading.Thread(target=play_market_prep_animation, args=(chat_id, call.message.message_id, sid), daemon=True).start()
 
         assigned_worker = sess.get("assigned_worker")
+        if not assigned_worker:
+            assigned_worker = find_best_worker()
+            if assigned_worker:
+                sess["assigned_worker"] = assigned_worker
+
         if assigned_worker:
             relay_action_to_worker(assigned_worker, {
                 "kind": "PREPARE_WINGO",
                 "session_id": sid,
                 "chat_id": chat_id
             })
+        else:
+            prep_ev = active_prep_animations.pop(sid, None)
+            if prep_ev:
+                prep_ev.set()
+            fail_text = (
+                f"<b>▸ ﴾ {to_bold('NO WORKERS AVAILABLE')} ﴿</b>\n\n"
+                f"No active worker node found in cluster.\n"
+                f"Please make sure <code>worker.py</code> is running on your VPS."
+            )
+            try:
+                bot.edit_message_text(fail_text, chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_start_screen_keyboard(sid))
+            except Exception:
+                bot.send_message(chat_id, fail_text, reply_markup=get_start_screen_keyboard(sid))
 
     elif action == "set_tgt" and sid in active_sessions:
         active_sessions[sid]["input_mode"] = "WAITING_TARGET"
@@ -1107,6 +1135,50 @@ def handle_callbacks(call):
         active_sessions.pop(sid, None)
         safe_delete_message(chat_id, call.message.message_id)
         bot.send_message(chat_id, f"<b>▸ ﴾ {to_bold('SESSION TERMINATED')} ﴿</b>\nSend /start to begin a new session.")
+
+    elif action == "cancel_prep" and sid in active_sessions:
+        prep_ev = active_prep_animations.pop(sid, None)
+        if prep_ev:
+            prep_ev.set()
+        bot.answer_callback_query(call.id, "Market preparation cancelled")
+        sess = active_sessions[sid]
+        assigned_worker = sess.get("assigned_worker")
+        if assigned_worker:
+            relay_action_to_worker(assigned_worker, {
+                "kind": "CANCEL_PREPARE",
+                "session_id": sid,
+                "chat_id": chat_id
+            })
+        ph = sess.get("phone", "")
+        masked = ph[:3] + "****" + ph[-3:] if len(ph) >= 6 else ph
+        caption = (
+            f"<b>✧ ﴾ {to_bold('LOGIN SUCCESSFUL')} ﴿ ✧</b>\n\n"
+            f"▸ Platform: <b>{sess.get('site_name', '')}</b>\n"
+            f"▸ Account: <code>{masked}</code>\n\n"
+            f"⬩➤ Click <b>START</b> below to configure and run trading parameters:"
+        )
+        try:
+            bot.edit_message_text(caption, chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_start_screen_keyboard(sid))
+            sess["last_dashboard_msg_id"] = call.message.message_id
+        except Exception:
+            msg = bot.send_message(chat_id, caption, reply_markup=get_start_screen_keyboard(sid))
+            sess["last_dashboard_msg_id"] = msg.message_id
+
+    elif action == "cancel_login" and sid in active_sessions:
+        login_ev = active_login_animations.pop(sid, None)
+        if login_ev:
+            login_ev.set()
+        bot.answer_callback_query(call.id, "Login cancelled")
+        assigned_worker = active_sessions[sid].get("assigned_worker")
+        if assigned_worker:
+            relay_action_to_worker(assigned_worker, {
+                "kind": "CANCEL_SESSION",
+                "session_id": sid,
+                "chat_id": chat_id
+            })
+        active_sessions.pop(sid, None)
+        safe_delete_message(chat_id, call.message.message_id)
+        bot.send_message(chat_id, f"<b>▸ ﴾ {to_bold('LOGIN CANCELLED')} ﴿</b>\nSend /start to begin a new session.")
 
 # ==============================================================================
 # USER TEXT INPUT HANDLER
