@@ -59,7 +59,7 @@ import psutil
 # ==============================================================================
 # WORKER CONFIGURATION & CLUSTER REGISTRY
 # ==============================================================================
-FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
+FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://server-51888-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 NODE_ID = f"worker_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
@@ -657,6 +657,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         tradesDone: 0,
         lastPred: null,
         lastPeriod: null,
+        circuitBreakerTriggered: false,
         w: 0,
         l: 0,
         cur_w_streak: 0,
@@ -668,7 +669,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
 
     function chkBal() {
         try {
-            // Fast targeted balance query to prevent any DOM reflow freeze
+            // Fast targeted balance query in BDT (৳ / Taka) - omit all paisa/decimals
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
             for (let i = 0; i < targeted.length; i++) {
                 let txt = targeted[i].innerText || '';
@@ -719,16 +720,24 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         return 30;
     }
 
+    // =========================================================================
+    // STRICT STEP MONEY MANAGEMENT ALGORITHM (MARTINGALE RATIO MODEL)
+    // 1. Total Ratio Divisor: R = 2^N - 1
+    // 2. Step 1 Base Amount: S_1 = floor(Account Balance / R)
+    // 3. Subsequent Steps: S_k = S_{k-1} * 2 for k = 2, 3, ..., N
+    // 4. Strict Tier Adherence: No arbitrary amounts (omits paisa/decimals)
+    // =========================================================================
     const calcSeq = (cBal, nSteps) => {
         let B = Math.floor(Number(cBal)) || 0;
         let n = parseInt(nSteps) || 5;
         if (n < 1) n = 1;
-        let u = Math.pow(2, n) - 1;
-        let s1 = Math.floor(B / u);
-        if (s1 < 1) s1 = 1;
-        let seq = [];
-        for (let i = 0; i < n; i++) {
-            seq.push(Math.floor(s1 * Math.pow(2, i)));
+        let R = Math.pow(2, n) - 1;
+        let s1 = Math.floor(B / R);
+        if (s1 < 1) s1 = 1; // Strict integer rounding minimum of 1 BDT
+        let seq = [s1];
+        for (let k = 1; k < n; k++) {
+            let sk = seq[k - 1] * 2;
+            seq.push(sk);
         }
         return seq;
     };
@@ -877,8 +886,18 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
             let ts = Math.floor(Date.now() / 1000);
             let sep = predictionApiUrl.includes('?') ? '&' : '?';
             let fetchUrl = predictionApiUrl + sep + "page=1&ts=" + ts;
-            let res = await fetch(fetchUrl);
-            let rawJson = await res.json();
+            let rawJson = null;
+            try {
+                let res = await fetch(fetchUrl);
+                if (res.ok) {
+                    rawJson = await res.json();
+                }
+            } catch(fetchErr) {
+                // Auto-Recovery: transient API drops or network glitches do not kill background process
+                isFetchingApi = false;
+                st.isTrd = false;
+                return;
+            }
 
             if (rawJson) {
                 let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
@@ -947,16 +966,29 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                                 st.cur_w_streak++;
                                 st.cur_l_streak = 0;
                                 if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                                // On Win: Automatically reset the trade state back to Step 1 (Index 0)
                                 st.stpIdx = 0;
-                                let nBal = chkBal();
-                                if (nBal > 0) st.curBal = nBal;
-                                st.dynSeq = calcSeq(st.curBal > 0 ? st.curBal : 100, st.steps);
+                                let liveBalNow = chkBal();
+                                st.dynSeq = calcSeq(liveBalNow > 0 ? liveBalNow : st.curBal, st.steps);
                             } else {
                                 st.l++;
                                 st.cur_l_streak++;
                                 st.cur_w_streak = 0;
                                 if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-                                st.stpIdx = Math.min(st.stpIdx + 1, (st.dynSeq.length > 0 ? st.dynSeq.length - 1 : st.steps - 1));
+
+                                // Max Step Failure (Circuit Breaker):
+                                // If a loss occurs at final step (N), automatically stop all operations to prevent balance liquidation
+                                if (st.stpIdx >= st.steps - 1) {
+                                    st.circuitBreakerTriggered = true;
+                                    st.isRun = false;
+                                    st.isTrd = false;
+                                    if (st.autoInt) clearInterval(st.autoInt);
+                                    isFetchingApi = false;
+                                    return;
+                                } else {
+                                    // On Loss: Escalate to next step (k + 1)
+                                    st.stpIdx = st.stpIdx + 1;
+                                }
                             }
                         }
 
@@ -973,15 +1005,18 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                             return;
                         }
 
-                        if (!st.dynSeq || st.dynSeq.length === 0) {
-                            st.dynSeq = calcSeq(nBal > 0 ? nBal : 100, st.steps);
-                        }
-                        if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
-                        let tAmt = st.dynSeq[st.stpIdx] || 1;
+                        // Strict Tier Adherence: Exact calculated step formula S_k
+                        // Integer Rounding Rule: Floor integer conversion, drop all paisa/decimals
+                        let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
 
                         if (nBal > 0 && nBal < tAmt) {
-                            st.stpIdx = 0;
-                            tAmt = st.dynSeq[0] || 1;
+                            // Insufficient balance to cover exact step tier -> activate Circuit Breaker
+                            st.circuitBreakerTriggered = true;
+                            st.isRun = false;
+                            st.isTrd = false;
+                            if (st.autoInt) clearInterval(st.autoInt);
+                            isFetchingApi = false;
+                            return;
                         }
 
                         let rawPred = (nextObj && (nextObj.size || nextObj.pred)) ||
@@ -1033,7 +1068,8 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         }
     }, 3000);
 
-    st.autoInt = setInterval(apiLoopTask, 1000);
+    // Request Throttling: cleanly paced polling routine at 1.5s to avoid server CPU spikes or rate limits
+    st.autoInt = setInterval(apiLoopTask, 1500);
     return "GHOST_TRADING_INITIATED";
 })();
 """
@@ -1171,6 +1207,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 if (window.__WINGO_ST) {
                     return {
                         isRun: window.__WINGO_ST.isRun,
+                        circuitBreakerTriggered: window.__WINGO_ST.circuitBreakerTriggered || false,
                         curBal: window.__WINGO_ST.curBal || 0,
                         tgtAmt: window.__WINGO_ST.tgtAmt || 0,
                         startBal: window.__WINGO_ST.startBal || 0,
@@ -1178,6 +1215,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         w: window.__WINGO_ST.w || 0,
                         l: window.__WINGO_ST.l || 0,
                         step: (window.__WINGO_ST.stpIdx || 0) + 1,
+                        steps: window.__WINGO_ST.steps || 5,
                         tradesDone: window.__WINGO_ST.tradesDone || 0
                     };
                 }
@@ -1194,23 +1232,46 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             tgt_amt = js_data.get("tgtAmt", 0)
             start_b = js_data.get("startBal") or sess.get("start_bal", 0)
             is_run = js_data.get("isRun", False)
+            circuit_breaker = js_data.get("circuitBreakerTriggered", False)
+            step_idx = js_data.get("step", 1)
+            tot_steps = js_data.get("steps", sess.get("total_steps", 5))
 
             task_payload = {
                 "chat_id": chat_id,
                 "session_id": sid,
                 "site_name": site_name,
-                "status": "RUNNING" if is_run else "PAUSED",
+                "status": "CIRCUIT_BREAKER_STOPPED" if circuit_breaker else ("RUNNING" if is_run else "PAUSED"),
                 "start_balance": start_b,
                 "current_balance": sess["cur_bal"],
                 "target_amount": tgt_amt,
+                "step": step_idx,
+                "total_steps": tot_steps,
                 "wins": sess["wins"],
                 "losses": sess["losses"],
+                "currency": "BDT",
                 "updated_at": time.time()
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            # Check if target profit is genuinely reached
-            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0 and sess["cur_bal"] > start_b:
+            # Max Step Failure Circuit Breaker check
+            if circuit_breaker:
+                sess["is_trading"] = False
+                emit_event_to_manager("CIRCUIT_BREAKER_TRIGGERED", {
+                    "session_id": sid,
+                    "chat_id": chat_id,
+                    "site_name": site_name,
+                    "start_balance": start_b,
+                    "final_balance": sess["cur_bal"],
+                    "step": step_idx,
+                    "total_steps": tot_steps,
+                    "wins": sess["wins"],
+                    "losses": sess["losses"]
+                })
+                break
+
+            # Absolute Target Balance Threshold Evaluation
+            # Immediately cease all automated betting operations when balance hits or exceeds target
+            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
                 firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
@@ -1221,9 +1282,12 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     "site_name": site_name,
                     "start_balance": start_b,
                     "final_balance": sess["cur_bal"],
+                    "target_amount": tgt_amt,
                     "wins": sess["wins"],
                     "losses": sess["losses"]
                 })
+                # Immediately destroy browser session tab to free allocated RAM under 512MB
+                close_session_tab(sid)
                 break
             elif not is_run:
                 sess["is_trading"] = False
@@ -1385,11 +1449,36 @@ def worker_task_listener():
                         })
 
                 elif kind == "STOP_TRADING" and sid in active_sessions:
-                    safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); }"))
-                    active_sessions[sid]["is_trading"] = False
+                    # Emergency / Routine Stop: Halt trading loop, destroy active instances, fully release memory
+                    safe_tab_execute(sid, lambda drv: drv.execute_script("""
+                        if (window.__WINGO_ST) {
+                            window.__WINGO_ST.isRun = false;
+                            window.__WINGO_ST.isTrd = false;
+                            if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
+                        }
+                        try { window.stop(); } catch(e){}
+                    """))
+                    close_session_tab(sid)
+                    emit_event_to_manager("STOP_CONFIRMED", {
+                        "session_id": sid,
+                        "chat_id": chat_id
+                    })
 
                 elif kind == "CANCEL_SESSION" and sid in active_sessions:
+                    # Instantly abort active async requests, destroy browser tabs/headless contexts, terminate calls, and clear user session data
+                    safe_tab_execute(sid, lambda drv: drv.execute_script("""
+                        if (window.__WINGO_ST) {
+                            window.__WINGO_ST.isRun = false;
+                            window.__WINGO_ST.isTrd = false;
+                            if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
+                        }
+                        try { window.stop(); } catch(e){}
+                    """))
                     close_session_tab(sid)
+                    emit_event_to_manager("CANCEL_CONFIRMED", {
+                        "session_id": sid,
+                        "chat_id": chat_id
+                    })
 
         except Exception as e:
             logger.debug(f"Worker task loop tick: {e}")
@@ -1430,13 +1519,17 @@ def worker_heartbeat_loop():
         time.sleep(4.0)
 
 def continuous_24h_watchdog():
+    """24/7 Non-Stop Lifecycle Watchdog: Never terminates active trading sessions."""
     while WORKER_ACTIVE:
         try:
             now = time.time()
             for sid, item in list(active_sessions.items()):
-                created_at = item.get("created_at", now)
+                # NON-STOP 24/7 AUTOMATION: Retain active trading sessions indefinitely
+                if item.get("is_trading"):
+                    continue
                 last_act = item.get("last_activity", now)
-                if now - created_at >= 86400 or (now - last_act > 900 and not item.get("is_trading")):
+                # Only clean abandoned idle tabs after 4+ hours of complete inactivity
+                if now - last_act > 14400 and not item.get("is_trading"):
                     close_session_tab(sid)
         except Exception:
             pass
