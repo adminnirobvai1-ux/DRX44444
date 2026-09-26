@@ -637,441 +637,180 @@ return 0;
 # ==============================================================================
 # INTEGRATED 24/7 INVISIBLE GHOST STEP MAKER TRADING ENGINE
 # ==============================================================================
-WINGO_CORE_JS = r"""
-const autoTargetProfit = arguments[0];
-const autoTotalSteps = arguments[1];
-const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
-
+WINGO_DOM_HELPERS_JS = r"""
 (function(){
-    let ghostContainer = document.getElementById('sys-core-fin');
-    if (!ghostContainer) {
-        ghostContainer = document.createElement('div');
-        ghostContainer.id = 'sys-core-fin';
-        ghostContainer.setAttribute('style', 'display: none !important; opacity: 0 !important; pointer-events: none !important; position: fixed !important; top: -9999px !important; left: -9999px !important; width: 0 !important; height: 0 !important; z-index: -9999 !important; overflow: hidden !important;');
-        document.body.appendChild(ghostContainer);
-    }
-
-    if (window.__WINGO_ST && window.__WINGO_ST.isRun) {
-        window.__WINGO_ST.steps = Math.max(1, parseInt(autoTotalSteps) || 5);
-        let userTgt = parseFloat(autoTargetProfit) || 0;
-        if (userTgt > 0) {
-            window.__WINGO_ST.targetProfit = userTgt;
-            if (window.__WINGO_ST.startBal > 0) {
-                window.__WINGO_ST.tgtAmt = window.__WINGO_ST.startBal + userTgt;
-            }
-        }
-        return "ALREADY_RUNNING_UPDATED";
-    }
-
-    if (window.__WINGO_ST && window.__WINGO_ST.autoInt) {
-        clearInterval(window.__WINGO_ST.autoInt);
-    }
-
-    // Step Maker Algorithm: strictly NO decimals / points (Floor Integer)
-    const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 0;
-        let n = parseInt(nSteps) || 5;
-        if (n < 1) n = 1;
-        let sumPowers = Math.pow(2, n) - 1;
-        let exactFirst = B / sumPowers;
-        let seq = [];
-        for (let i = 0; i < n; i++) {
-            let step = Math.floor(exactFirst * Math.pow(2, i));
-            if (step < 1) step = 1;
-            seq.push(step);
-        }
-        return seq;
-    };
-
-    const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
-    const st = {
-        isRun: true,
-        targetProfit: parseFloat(autoTargetProfit) || 0,
-        tgtAmt: 0,
-        startBal: 0,
-        baseBal: 0,
-        curBal: 0,
-        autoInt: null,
-        isTrd: false,
-        stpIdx: 0,
-        steps: Math.max(1, parseInt(autoTotalSteps) || 5),
-        dynSeq: [],
-        tradesDone: 0,
-        lastPred: null,
-        lastPeriod: null,
-        w: 0,
-        l: 0,
-        cur_w_streak: 0,
-        cur_l_streak: 0,
-        max_w_streak: 0,
-        max_l_streak: 0
-    };
-    window.__WINGO_ST = st;
-
-    function chkBal() {
+    window.__GET_WINGO_STATE = function() {
+        let bal = 0;
         try {
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
             for (let i = 0; i < targeted.length; i++) {
                 let txt = targeted[i].innerText || '';
                 let match = txt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
                 if (match) {
-                    let num = Math.floor(parseFloat(match[1].replace(/,/g, '')));
-                    if (num > 0) {
-                        st.curBal = num;
-                        return num;
-                    }
+                    let n = Math.floor(parseFloat(match[1].replace(/,/g, '')));
+                    if (n > 0) { bal = n; break; }
                 }
             }
-            let els = document.querySelectorAll('span, div, p');
-            for (let i = 0; i < els.length; i++) {
-                let txt = els[i].innerText || '';
-                if (txt.includes('Wallet balance') || txt.includes('Balance')) {
-                    let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
-                    let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
-                    if (match) {
-                        st.curBal = Math.floor(parseFloat(match[1].replace(/,/g, '')));
-                        return st.curBal;
+            if (!bal) {
+                let els = document.querySelectorAll('span, div, p');
+                for (let i = 0; i < els.length; i++) {
+                    let txt = els[i].innerText || '';
+                    if (txt.includes('Wallet balance') || txt.includes('Balance')) {
+                        let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
+                        let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
+                        if (match) { bal = Math.floor(parseFloat(match[1].replace(/,/g, ''))); break; }
                     }
-                }
-            }
-            for (let i = 0; i < els.length; i++) {
-                let txt = els[i].innerText || '';
-                if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
-                    st.curBal = Math.floor(parseFloat(txt.replace(/[^\d.]/g, '')));
-                    return st.curBal;
                 }
             }
         } catch(e) {}
-        return st.curBal || 0;
-    }
 
-    function getRemainingSeconds() {
+        let remSec = 30;
         try {
-            let timeEl = document.querySelector('.time-box, [class*="time" i], .Time');
+            let timeEl = document.querySelector('.time-box, [class*="time" i], .Time, .countdown, [class*="countdown" i]');
             if (timeEl) {
                 let txt = timeEl.innerText || '';
                 let m = txt.match(/(\d+)\s*:\s*(\d+)/);
-                if (m) {
-                    return (parseInt(m[1]) * 60) + parseInt(m[2]);
+                if (m) remSec = (parseInt(m[1]) * 60) + parseInt(m[2]);
+                else {
+                    let digits = txt.replace(/\D/g, '');
+                    if (digits.length >= 1) remSec = parseInt(digits);
                 }
             }
-        } catch(e){}
-        return 30;
-    }
+        } catch(e) {}
 
-    const getNextLivePeriod = (str) => {
-        let chars = String(str).split('');
-        for (let i = chars.length - 1; i >= 0; i--) {
-            if (chars[i] !== '9') {
-                chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
-                return chars.join('');
-            }
-            chars[i] = '0';
-        }
-        return '1' + chars.join('');
+        return { bal: bal, remSec: remSec };
     };
 
-    const drx_triggerEvent = (el, etype) => {
-        let ev = new Event(etype, { bubbles: true, cancelable: true });
-        el.dispatchEvent(ev);
-    };
-
-    const drx_simClick = (el) => {
-        if (!el) return;
-        ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(evt => {
-            try {
-                el.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
-            } catch(e) {}
-        });
-        if (typeof el.click === 'function') {
-            try { el.click(); } catch(e) {}
-        }
-    };
-
-    const exeTrd = (pred, amt, cb) => {
+    window.__EXECUTE_WINGO_BET = function(pred, amt) {
         try {
-            let remSec = getRemainingSeconds();
-            if (remSec <= 5 && remSec > 0) {
-                if (cb) cb(false);
-                return;
-            }
-
+            let targetText = String(pred).toUpperCase().trim();
             let btn = null;
-            let targetText = String(pred).toLowerCase().trim();
-            let btns = document.querySelectorAll('button, div, span');
-            for (let i = 0; i < btns.length; i++) {
-                let t = (btns[i].innerText || '').trim().toLowerCase();
-                if (t === targetText && btns[i].offsetParent && !btns[i].children.length) {
-                    btn = btns[i];
-                    break;
-                }
-            }
-            if (!btn) {
-                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i]');
-                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i]');
-                else if (targetText === 'green') btn = document.querySelector('button[class*="green"], div[class*="green"]');
-                else if (targetText === 'red') btn = document.querySelector('button[class*="red"], div[class*="red"]');
-                else if (targetText === 'violet') btn = document.querySelector('button[class*="violet"], div[class*="violet"]');
-            }
-            if (!btn) {
-                if (cb) cb(false);
-                return;
-            }
-            drx_simClick(btn);
 
-            let checkAttempts = 0;
-            let valInterval = setInterval(() => {
-                checkAttempts++;
+            if (targetText === 'BIG') {
+                btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button.big, [class*="big" i]');
+            } else if (targetText === 'SMALL') {
+                btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button.small, [class*="small" i]');
+            }
 
-                // Ensure base unit "1" is selected (fixes 10x, 20x, 100x multiplier bug)
-                let unitButtons = document.querySelectorAll('.Betting__C-foot-c button, .Betting__C-foot-c div, .van-button, div[class*="balance" i] button, div[class*="unit" i] span, button');
-                for (let ub of unitButtons) {
-                    let uTxt = (ub.innerText || '').trim();
-                    if (uTxt === '1' && ub.offsetParent && !ub.children.length) {
-                        drx_simClick(ub);
+            if (!btn || !btn.offsetParent) {
+                let btns = document.querySelectorAll('button, div[role="button"], div, span');
+                for (let b of btns) {
+                    let t = (b.innerText || '').trim().toUpperCase();
+                    if ((t === targetText || t.startsWith(targetText + ' ') || t.endsWith(' ' + targetText)) && b.offsetParent && b.offsetWidth > 15) {
+                        btn = b;
                         break;
                     }
                 }
+            }
 
-                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
-                if (inpEl || checkAttempts > 18) {
-                    clearInterval(valInterval);
-                    if (inpEl) {
-                        inpEl.focus();
-                        let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-                        if (setV) setV.call(inpEl, String(amt));
-                        else inpEl.value = amt;
-                        drx_triggerEvent(inpEl, 'input');
-                        drx_triggerEvent(inpEl, 'change');
-                        drx_triggerEvent(inpEl, 'blur');
-                    }
-                    setTimeout(() => {
-                        let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
-                        if (!dEl) {
-                            let docButtons = document.querySelectorAll('button, div[role="button"]');
-                            for (let b of docButtons) {
-                                let txt = (b.innerText || '').toLowerCase();
-                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
-                                    dEl = b;
-                                    break;
-                                }
-                            }
-                        }
-                        if (dEl) {
-                            drx_simClick(dEl);
-                        }
-                        setTimeout(() => {
-                            if (cb) cb(true);
-                        }, 1800);
-                    }, 700);
-                }
-            }, 180);
+            if (!btn) {
+                return { success: false, reason: "BTN_NOT_FOUND_" + targetText };
+            }
+
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+                btn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+            });
+            if (typeof btn.click === 'function') btn.click();
+
+            return { success: true, reason: "CLICKED_" + targetText };
         } catch(e) {
-            if (cb) cb(false);
+            return { success: false, reason: e.toString() };
         }
     };
 
-    let initialBal = chkBal();
-    st.startBal = initialBal;
-    st.curBal = initialBal;
-    st.baseBal = initialBal > 0 ? initialBal : 100;
-    if (initialBal > 0 && st.targetProfit > 0) {
-        st.tgtAmt = initialBal + st.targetProfit;
-    } else {
-        st.tgtAmt = 0;
-    }
-
-    st.dynSeq = calcSeq(st.baseBal, st.steps);
-    st.stpIdx = 0;
-    sessionStorage.removeItem('drx_sig');
-
-    let isFetchingApi = false;
-
-    const apiLoopTask = async () => {
-        if (!st.isRun || st.isTrd || isFetchingApi) return;
-        isFetchingApi = true;
-
+    window.__CONFIRM_WINGO_BET = function(amt) {
         try {
-            let liveB = chkBal();
-            if (liveB > 0) {
-                if (st.startBal <= 0) {
-                    st.startBal = liveB;
-                    st.baseBal = liveB;
-                    st.dynSeq = calcSeq(st.baseBal, st.steps);
-                    if (st.targetProfit > 0) {
-                        st.tgtAmt = st.startBal + st.targetProfit;
+            // 1. Force base unit "1" to eliminate any 10x, 20x multiplier bug
+            let unitButtons = document.querySelectorAll('.Betting__C-foot-c button, .Betting__C-foot-c div, .van-button, div[class*="balance" i] button, div[class*="unit" i] span, button');
+            for (let ub of unitButtons) {
+                let uTxt = (ub.innerText || '').trim();
+                if (uTxt === '1' && ub.offsetParent && ub.offsetWidth > 10) {
+                    ub.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    if (typeof ub.click === 'function') ub.click();
+                    break;
+                }
+            }
+
+            // 2. Set input amount
+            let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric']");
+            if (inpEl) {
+                inpEl.focus();
+                let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                if (setV) setV.call(inpEl, String(amt));
+                else inpEl.value = String(amt);
+                inpEl.dispatchEvent(new Event('input', { bubbles: true }));
+                inpEl.dispatchEvent(new Event('change', { bubbles: true }));
+                inpEl.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+
+            // 3. Confirm button
+            let confBtn = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
+            if (!confBtn) {
+                let docButtons = document.querySelectorAll('button, div[role="button"]');
+                for (let b of docButtons) {
+                    let txt = (b.innerText || '').toLowerCase();
+                    if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent && b.offsetWidth > 20) {
+                        confBtn = b;
+                        break;
                     }
                 }
             }
 
-            if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0 && st.curBal > st.startBal) {
-                st.isRun = false;
-                st.isTrd = false;
-                if (st.autoInt) clearInterval(st.autoInt);
-                isFetchingApi = false;
-                return;
+            if (confBtn) {
+                confBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                if (typeof confBtn.click === 'function') confBtn.click();
+                return { success: true, reason: "CONFIRMED_AMOUNT_" + amt };
             }
 
-            let ts = Math.floor(Date.now() / 1000);
-            let sep = predictionApiUrl.includes('?') ? '&' : '?';
-            let fetchUrl = predictionApiUrl + sep + "page=1&ts=" + ts;
-            let res = await fetch(fetchUrl);
-            let rawJson = await res.json();
-
-            if (rawJson) {
-                let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
-                let histArray = rawJson.history || (rawJson.data && rawJson.data.history) || [];
-
-                if (!nextObj && Array.isArray(rawJson) && rawJson[0]) {
-                    let first = rawJson[0];
-                    if (first.next) {
-                        nextObj = first.next;
-                        histArray = first.history || histArray;
-                    } else {
-                        histArray = first.history || [];
-                        nextObj = {
-                            period: histArray[0] ? getNextLivePeriod(String(histArray[0].pid || histArray[0].period)) : '',
-                            size: first.size || first.pred || first.prediction || 'BIG'
-                        };
-                    }
-                }
-
-                if (nextObj || (histArray && histArray.length > 0)) {
-                    let cSig = '';
-                    if (nextObj && nextObj.period) {
-                        cSig = String(nextObj.period).trim();
-                    } else if (histArray[0]) {
-                        let prevPid = String(histArray[0].period || histArray[0].pid || '');
-                        cSig = prevPid ? getNextLivePeriod(prevPid) : '';
-                    }
-
-                    let sSig = sessionStorage.getItem('drx_sig');
-
-                    if (cSig && cSig !== sSig) {
-                        if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
-                            let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastPeriod)) || histArray[0];
-                            let won = false;
-
-                            if (finishedItem) {
-                                let actualSize = '';
-                                if (finishedItem.actual_size) {
-                                    actualSize = String(finishedItem.actual_size).toUpperCase().trim();
-                                } else if (typeof finishedItem.actual === 'number') {
-                                    actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
-                                } else if (finishedItem.actual) {
-                                    let actStr = String(finishedItem.actual).toUpperCase().trim();
-                                    if (actStr === 'BIG' || actStr === 'SMALL') actualSize = actStr;
-                                    else if (!isNaN(parseInt(actStr))) actualSize = parseInt(actStr) >= 5 ? 'BIG' : 'SMALL';
-                                }
-
-                                if (finishedItem.status) {
-                                    let statStr = String(finishedItem.status).toUpperCase();
-                                    if (statStr === 'WIN' && finishedItem.pred && String(finishedItem.pred).toUpperCase() === st.lastPred) {
-                                        won = true;
-                                    } else if (statStr === 'LOSS' && finishedItem.pred && String(finishedItem.pred).toUpperCase() === st.lastPred) {
-                                        won = false;
-                                    } else {
-                                        won = (st.lastPred === actualSize);
-                                    }
-                                } else {
-                                    won = (st.lastPred === actualSize);
-                                }
-                            }
-
-                            if (won) {
-                                st.w++;
-                                st.cur_w_streak++;
-                                st.cur_l_streak = 0;
-                                if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                                // Reset step index to step 1 on WIN
-                                st.stpIdx = 0;
-
-                                // If account balance increased, dynamically recalculate sequence for the higher capital
-                                let freshBal = chkBal();
-                                if (freshBal > st.baseBal) {
-                                    st.baseBal = freshBal;
-                                    st.dynSeq = calcSeq(st.baseBal, st.steps);
-                                }
-                            } else {
-                                st.l++;
-                                st.cur_l_streak++;
-                                st.cur_w_streak = 0;
-                                if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-                                // On loss: strictly advance step index without shrinking step amount
-                                st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
-                            }
-                        }
-
-                        st.lastPred = null;
-                        st.lastPeriod = cSig;
-                        st.isTrd = true;
-
-                        let nBal = chkBal();
-                        if (nBal <= 0) nBal = st.curBal;
-
-                        if (st.tgtAmt > 0 && nBal >= st.tgtAmt && st.startBal > 0 && nBal > st.startBal) {
-                            st.isTrd = false;
-                            isFetchingApi = false;
-                            return;
-                        }
-
-                        // Ensure step index stays in bounds
-                        if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
-                        let tAmt = st.dynSeq[st.stpIdx] || 1;
-
-                        let rawPred = (nextObj && (nextObj.size || nextObj.pred)) ||
-                                      rawJson.size ||
-                                      rawJson.pred ||
-                                      rawJson.prediction ||
-                                      'BIG';
-                        let prediction = String(rawPred).toUpperCase().trim();
-
-                        setTimeout(() => {
-                            if (prediction === 'SKIP') {
-                                st.lastPred = null;
-                                sessionStorage.setItem('drx_sig', cSig);
-                                setTimeout(() => { st.isTrd = false; }, 1000);
-                            } else {
-                                st.lastPred = prediction;
-                                exeTrd(prediction, tAmt, (suc) => {
-                                    if (suc) {
-                                        sessionStorage.setItem('drx_sig', cSig);
-                                        sessionStorage.setItem('drx_p_bal', st.curBal);
-                                        st.tradesDone++;
-                                    } else {
-                                        st.lastPred = null;
-                                    }
-                                    setTimeout(() => { st.isTrd = false; }, 1000);
-                                });
-                            }
-                        }, 1800);
-                    }
-                }
-            }
+            return { success: false, reason: "CONFIRM_BTN_NOT_FOUND" };
         } catch(e) {
-            st.isTrd = false;
+            return { success: false, reason: e.toString() };
         }
-        isFetchingApi = false;
     };
 
-    let tradeLockTs = 0;
-    setInterval(() => {
-        if (st.isTrd) {
-            if (!tradeLockTs) tradeLockTs = Date.now();
-            else if (Date.now() - tradeLockTs > 15000) {
-                st.isTrd = false;
-                isFetchingApi = false;
-                tradeLockTs = 0;
-            }
-        } else {
-            tradeLockTs = 0;
-        }
-    }, 3000);
-
-    st.autoInt = setInterval(apiLoopTask, 1000);
-    return "GHOST_TRADING_INITIATED";
+    return "HELPERS_INSTALLED";
 })();
 """
+
+def compute_step_maker(bal: float, steps_count: int) -> list:
+    """Computes exact doubling martingale sequence strictly in floor integers.
+    Formula: first_step = max(1, bal // (2^n - 1))
+    sequence = [first_step * 2^i for i in range(n)]
+    e.g. 100 BDT / 5 steps -> [3, 6, 12, 24, 48]
+    e.g. 70 BDT / 5 steps -> [2, 4, 8, 16, 32]
+    e.g. 200 BDT / 5 steps -> [6, 12, 24, 48, 96]
+    """
+    b = max(1, int(bal))
+    n = max(1, int(steps_count))
+    sum_powers = (2 ** n) - 1
+    first_step = max(1, b // sum_powers)
+    return [first_step * (2 ** i) for i in range(n)]
+
+def fetch_prediction_api(pred_url: str):
+    """Direct Python HTTP fetch - bypasses all browser CORS & CSP blocks cleanly."""
+    try:
+        ts = int(time.time())
+        sep = "&" if "?" in pred_url else "?"
+        url = f"{pred_url}{sep}page=1&ts={ts}"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            data = resp.read()
+            raw = json.loads(data.decode("utf-8"))
+            if not raw:
+                return None
+            next_obj = raw.get("next") or (raw.get("data", {}).get("next") if isinstance(raw.get("data"), dict) else None)
+            hist = raw.get("history") or (raw.get("data", {}).get("history") if isinstance(raw.get("data"), dict) else [])
+            if not next_obj and isinstance(raw, list) and len(raw) > 0:
+                first = raw[0]
+                next_obj = first.get("next") or {"period": "", "size": first.get("size") or first.get("pred") or "BIG"}
+                hist = first.get("history") or []
+            return {"next": next_obj, "history": hist}
+    except Exception as e:
+        logger.debug(f"Prediction fetch error: {e}")
+        return None
 
 # ==============================================================================
 # WORKER EXECUTION FLOWS
@@ -1187,76 +926,179 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
         "live_balance": current_bal
     })
 
-def worker_monitor_trading_loop(chat_id, sid, site_name):
-    while True:
-        sess = active_sessions.get(sid)
-        if not sess or not sess.get("is_trading"):
-            break
+def worker_monitor_trading_loop(chat_id, sid, site_name, target_profit, total_steps, pred_url):
+    """24/7 Python-driven trading loop. Direct HTTP prediction fetch (zero CORS issues).
+    Implements exact doubling Step Maker martingale with zero fractional points."""
+    sess = active_sessions.get(sid)
+    if not sess:
+        return
 
-        def _get_st(drv):
-            return drv.execute_script("""
-                if (window.__WINGO_ST) {
-                    return {
-                        isRun: window.__WINGO_ST.isRun,
-                        curBal: window.__WINGO_ST.curBal || 0,
-                        tgtAmt: window.__WINGO_ST.tgtAmt || 0,
-                        startBal: window.__WINGO_ST.startBal || 0,
-                        baseBal: window.__WINGO_ST.baseBal || 0,
-                        targetProfit: window.__WINGO_ST.targetProfit || 0,
-                        w: window.__WINGO_ST.w || 0,
-                        l: window.__WINGO_ST.l || 0,
-                        step: (window.__WINGO_ST.stpIdx || 0) + 1,
-                        tradesDone: window.__WINGO_ST.tradesDone || 0
-                    };
-                }
-                return null;
-            """)
+    logger.info(f"[*] [AUTO TRADE ACTIVE] Node: {NODE_ID} | Session: {sid} | Site: {site_name}")
 
-        js_data = safe_tab_execute(sid, _get_st)
+    # Inject DOM helpers into browser page
+    safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_DOM_HELPERS_JS), timeout=6.0)
 
-        if js_data:
-            sess["cur_bal"] = js_data.get("curBal", sess.get("cur_bal", 0))
-            sess["current_balance"] = sess["cur_bal"]
-            sess["wins"] = js_data.get("w", 0)
-            sess["losses"] = js_data.get("l", 0)
-            tgt_amt = js_data.get("tgtAmt", 0)
-            start_b = js_data.get("startBal") or sess.get("start_bal", 0)
-            is_run = js_data.get("isRun", False)
+    # Initial Balance Read
+    init_data = safe_tab_execute(sid, lambda drv: drv.execute_script("return window.__GET_WINGO_STATE ? window.__GET_WINGO_STATE() : null;"), timeout=5.0) or {}
+    init_bal = float(init_data.get("bal") or sess.get("current_balance") or 100.0)
+    if init_bal <= 0:
+        init_bal = 100.0
 
-            task_payload = {
-                "chat_id": chat_id,
-                "session_id": sid,
-                "site_name": site_name,
-                "status": "RUNNING" if is_run else "PAUSED",
-                "start_balance": start_b,
-                "current_balance": sess["cur_bal"],
-                "target_amount": tgt_amt,
-                "wins": sess["wins"],
-                "losses": sess["losses"],
-                "updated_at": time.time()
-            }
-            firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
+    sess["start_bal"] = init_bal
+    sess["base_bal"] = init_bal
+    sess["cur_bal"] = init_bal
+    sess["target_total"] = (init_bal + target_profit) if target_profit > 0 else 0.0
 
-            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0 and sess["cur_bal"] > start_b:
+    step_sequence = compute_step_maker(init_bal, total_steps)
+    step_idx = 0
+    last_bet_period = None
+    last_bet_pred = None
+    last_bet_amt = 0
+    last_processed_pid = None
+    wins = 0
+    losses = 0
+    trades_done = 0
+    cur_w_streak = 0
+    cur_l_streak = 0
+    max_w_streak = 0
+    max_l_streak = 0
+    last_telemetry_ts = 0
+
+    sess["wins"] = wins
+    sess["losses"] = losses
+    sess["step"] = step_idx + 1
+
+    logger.info(f"[*] Base Bal: {init_bal} ৳ | Step Maker Sequence ({total_steps} steps): {step_sequence} | Target Goal: {sess['target_total']} ৳")
+
+    while sess.get("is_trading") and WORKER_ACTIVE:
+        try:
+            # 1. Read live browser state (balance & countdown)
+            st_data = safe_tab_execute(sid, lambda drv: drv.execute_script("return window.__GET_WINGO_STATE ? window.__GET_WINGO_STATE() : null;"), timeout=4.0) or {}
+            live_b = float(st_data.get("bal") or 0.0)
+            rem_sec = int(st_data.get("remSec", 30))
+            if live_b > 0:
+                sess["cur_bal"] = live_b
+                sess["current_balance"] = live_b
+
+            # 2. Check if Target Profit is Reached
+            if sess["target_total"] > 0 and sess["cur_bal"] >= sess["target_total"] and sess["cur_bal"] > sess["start_bal"]:
+                logger.info(f"[!] Target Profit Fulfilled! Current Balance: {sess['cur_bal']} >= Target: {sess['target_total']}")
                 sess["is_trading"] = False
-                task_payload["status"] = "COMPLETED"
-                firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
-
                 emit_event_to_manager("TARGET_ACHIEVED", {
                     "session_id": sid,
                     "chat_id": chat_id,
                     "site_name": site_name,
-                    "start_balance": start_b,
+                    "start_balance": sess["start_bal"],
                     "final_balance": sess["cur_bal"],
-                    "wins": sess["wins"],
-                    "losses": sess["losses"]
+                    "wins": wins,
+                    "losses": losses
                 })
                 break
-            elif not is_run:
-                sess["is_trading"] = False
-                break
 
-        time.sleep(4.0)
+            # 3. Direct HTTP Prediction Signal (Zero CORS, 100% Reliable)
+            pred_data = fetch_prediction_api(pred_url)
+            if pred_data:
+                next_info = pred_data.get("next") or {}
+                hist_list = pred_data.get("history") or []
+
+                # A. Evaluate outcome of previously placed bet
+                if last_bet_period:
+                    finished = None
+                    for h in hist_list:
+                        if str(h.get("period") or h.get("pid")) == str(last_bet_period):
+                            finished = h
+                            break
+                    if not finished and hist_list:
+                        first_pid = str(hist_list[0].get("period") or hist_list[0].get("pid"))
+                        if first_pid == str(last_bet_period):
+                            finished = hist_list[0]
+
+                    if finished:
+                        won = False
+                        act_sz = str(finished.get("actual_size") or finished.get("actual") or "").upper().strip()
+                        if act_sz in ["0", "1", "2", "3", "4"]: act_sz = "SMALL"
+                        elif act_sz in ["5", "6", "7", "8", "9"]: act_sz = "BIG"
+
+                        st_str = str(finished.get("status") or "").upper()
+                        if st_str == "WIN" and finished.get("pred") and str(finished.get("pred")).upper() == last_bet_pred:
+                            won = True
+                        elif st_str == "LOSS" and finished.get("pred") and str(finished.get("pred")).upper() == last_bet_pred:
+                            won = False
+                        else:
+                            won = (last_bet_pred == act_sz)
+
+                        if won:
+                            wins += 1
+                            cur_w_streak += 1
+                            cur_l_streak = 0
+                            if cur_w_streak > max_w_streak: max_w_streak = cur_w_streak
+                            step_idx = 0  # WIN: Reset to Step 1
+                            logger.info(f"[*] [ROUND WON] Period: {last_bet_period} | Bet: {last_bet_pred} ({last_bet_amt} ৳) | Reset Step 1")
+                            if sess["cur_bal"] > sess["base_bal"]:
+                                sess["base_bal"] = sess["cur_bal"]
+                                step_sequence = compute_step_maker(sess["base_bal"], total_steps)
+                                logger.info(f"[*] Balance Grew! Updated Sequence: {step_sequence}")
+                        else:
+                            losses += 1
+                            cur_l_streak += 1
+                            cur_w_streak = 0
+                            if cur_l_streak > max_l_streak: max_l_streak = cur_l_streak
+                            step_idx = min(step_idx + 1, len(step_sequence) - 1)  # LOSS: Advance Step
+                            logger.info(f"[*] [ROUND LOST] Period: {last_bet_period} | Bet: {last_bet_pred} ({last_bet_amt} ৳) | Next: Step {step_idx + 1} ({step_sequence[step_idx]} ৳)")
+
+                        last_bet_period = None
+                        last_bet_pred = None
+                        sess["wins"] = wins
+                        sess["losses"] = losses
+                        sess["step"] = step_idx + 1
+
+                # B. Place Bet for Upcoming Period
+                curr_pid = str(next_info.get("period") or "").strip()
+                curr_sz = str(next_info.get("size") or next_info.get("pred") or "BIG").upper().strip()
+
+                if curr_pid and curr_pid != last_processed_pid and rem_sec > 6:
+                    if curr_sz in ["BIG", "SMALL", "GREEN", "RED", "VIOLET"]:
+                        bet_amt = step_sequence[step_idx]
+                        logger.info(f"[*] [AUTO BET] Period: {curr_pid} | Size: {curr_sz} | Amount: {bet_amt} ৳ | Step: {step_idx + 1} of {len(step_sequence)}")
+
+                        # 1. Click selection (BIG/SMALL)
+                        safe_tab_execute(sid, lambda drv: drv.execute_script("return window.__EXECUTE_WINGO_BET(arguments[0], arguments[1]);", curr_sz, bet_amt), timeout=3.5)
+                        time.sleep(0.4)
+                        # 2. Confirm amount
+                        safe_tab_execute(sid, lambda drv: drv.execute_script("return window.__CONFIRM_WINGO_BET(arguments[0]);", bet_amt), timeout=3.5)
+                        time.sleep(0.5)
+
+                        last_processed_pid = curr_pid
+                        last_bet_period = curr_pid
+                        last_bet_pred = curr_sz
+                        last_bet_amt = bet_amt
+                        trades_done += 1
+                        sess["tradesDone"] = trades_done
+
+            # 4. Periodic Live Telemetry (every 3 seconds)
+            now_ts = time.time()
+            if now_ts - last_telemetry_ts >= 3.0:
+                last_telemetry_ts = now_ts
+                sess["step"] = step_idx + 1
+                sess["cur_w_streak"] = cur_w_streak
+                sess["cur_l_streak"] = cur_l_streak
+                sess["max_w_streak"] = max_w_streak
+                sess["max_l_streak"] = max_l_streak
+                emit_event_to_manager("LIVE_TELEMETRY", {
+                    "session_id": sid,
+                    "chat_id": chat_id,
+                    "site_name": site_name,
+                    "current_balance": sess["cur_bal"],
+                    "target_total": sess["target_total"],
+                    "wins": wins,
+                    "losses": losses,
+                    "step": step_idx + 1
+                })
+
+            time.sleep(1.2)
+        except Exception as e:
+            logger.error(f"Trading loop error on {sid}: {e}")
+            time.sleep(2.0)
 
 # ==============================================================================
 # WORKER TASK AND ACTION LISTENER LOOP
@@ -1319,100 +1161,71 @@ def worker_task_listener():
 
                 elif kind == "START_TRADING" and sid in active_sessions:
                     sess = active_sessions[sid]
-                    target_profit = action_pkt.get("target_profit", 0)
-                    total_steps = action_pkt.get("total_steps", 5)
+                    target_profit = float(action_pkt.get("target_profit", 0))
+                    total_steps = int(action_pkt.get("total_steps", 5))
                     pred_url = action_pkt.get("prediction_api_url") or PREDICTION_API_URL
                     sess["is_trading"] = True
                     sess["target_profit"] = target_profit
                     sess["total_steps"] = total_steps
-                    safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_CORE_JS, target_profit, total_steps, pred_url))
 
-                    cur_b = sess.get("current_balance", 0.0)
-                    sess["start_bal"] = cur_b
+                    # Start 24/7 Python auto-trade engine
                     threading.Thread(
                         target=worker_monitor_trading_loop,
-                        args=(chat_id, sid, sess["site_name"]),
+                        args=(chat_id, sid, sess["site_name"], target_profit, total_steps, pred_url),
                         daemon=True
                     ).start()
 
                 elif kind == "REQUEST_TELEMETRY" and sid in active_sessions:
                     sess = active_sessions[sid]
-                    def _tel(drv):
-                        return drv.execute_script("""
-                            if (window.__WINGO_ST) {
-                                return {
-                                    curBal: window.__WINGO_ST.curBal || 0,
-                                    tgtAmt: window.__WINGO_ST.tgtAmt || 0,
-                                    w: window.__WINGO_ST.w || 0,
-                                    l: window.__WINGO_ST.l || 0,
-                                    step: (window.__WINGO_ST.stpIdx || 0) + 1
-                                };
-                            }
-                            return null;
-                        """)
-                    tel_data = safe_tab_execute(sid, _tel)
-                    if tel_data:
-                        emit_event_to_manager("LIVE_TELEMETRY", {
-                            "session_id": sid,
-                            "chat_id": chat_id,
-                            "site_name": sess.get("site_name", ""),
-                            "current_balance": tel_data.get("curBal", 0),
-                            "target_total": tel_data.get("tgtAmt", 0),
-                            "wins": tel_data.get("w", 0),
-                            "losses": tel_data.get("l", 0),
-                            "step": tel_data.get("step", 1)
-                        })
+                    emit_event_to_manager("LIVE_TELEMETRY", {
+                        "session_id": sid,
+                        "chat_id": chat_id,
+                        "site_name": sess.get("site_name", ""),
+                        "current_balance": sess.get("cur_bal", 0.0),
+                        "target_total": sess.get("target_total", 0.0),
+                        "wins": sess.get("wins", 0),
+                        "losses": sess.get("losses", 0),
+                        "step": sess.get("step", 1)
+                    })
 
                 elif kind == "REQUEST_BALANCE" and sid in active_sessions:
                     sess = active_sessions[sid]
-                    def _b(drv):
-                        b = drv.execute_script("return (window.__WINGO_ST && window.__WINGO_ST.curBal) ? window.__WINGO_ST.curBal : null;")
-                        if b is None or float(b) == 0:
-                            b = drv.execute_script(FETCH_BALANCE_JS)
-                        return b
-                    bal_val = safe_tab_execute(sid, _b)
-                    if bal_val is not None and float(bal_val) > 0:
-                        sess["current_balance"] = float(bal_val)
-                        sess["cur_bal"] = float(bal_val)
+                    cur_b = sess.get("cur_bal", 0.0)
+                    if cur_b <= 0:
+                        bal_val = safe_tab_execute(sid, lambda drv: drv.execute_script("return (window.__GET_WINGO_STATE ? window.__GET_WINGO_STATE().bal : 0);"))
+                        if bal_val and float(bal_val) > 0:
+                            sess["cur_bal"] = float(bal_val)
+                            sess["current_balance"] = float(bal_val)
                     emit_event_to_manager("BALANCE_RESPONSE", {
                         "session_id": sid,
                         "chat_id": chat_id,
                         "call_id": action_pkt.get("call_id"),
-                        "live_balance": sess.get("current_balance", 0.0)
+                        "live_balance": sess.get("cur_bal", 0.0)
                     })
 
                 elif kind == "REQUEST_STATS" and sid in active_sessions:
                     sess = active_sessions[sid]
-                    def _s(drv):
-                        return drv.execute_script("""
-                            if (window.__WINGO_ST) {
-                                return {
-                                    w: window.__WINGO_ST.w || 0,
-                                    l: window.__WINGO_ST.l || 0,
-                                    step: (window.__WINGO_ST.stpIdx || 0) + 1,
-                                    steps: window.__WINGO_ST.steps || 5,
-                                    curBal: window.__WINGO_ST.curBal || 0,
-                                    tgtAmt: window.__WINGO_ST.tgtAmt || 0,
-                                    tradesDone: window.__WINGO_ST.tradesDone || 0,
-                                    cur_w_streak: window.__WINGO_ST.cur_w_streak || 0,
-                                    cur_l_streak: window.__WINGO_ST.cur_l_streak || 0,
-                                    max_w_streak: window.__WINGO_ST.max_w_streak || 0,
-                                    max_l_streak: window.__WINGO_ST.max_l_streak || 0
-                                };
-                            }
-                            return null;
-                        """)
-                    s_data = safe_tab_execute(sid, _s)
-                    if s_data:
-                        emit_event_to_manager("STATS_RESPONSE", {
-                            "session_id": sid,
-                            "chat_id": chat_id,
-                            "data": s_data
-                        })
+                    emit_event_to_manager("STATS_RESPONSE", {
+                        "session_id": sid,
+                        "chat_id": chat_id,
+                        "data": {
+                            "curBal": sess.get("cur_bal", 0.0),
+                            "tgtAmt": sess.get("target_total", 0.0),
+                            "step": sess.get("step", 1),
+                            "steps": sess.get("total_steps", 5),
+                            "w": sess.get("wins", 0),
+                            "l": sess.get("losses", 0),
+                            "tradesDone": sess.get("tradesDone", 0),
+                            "cur_w_streak": sess.get("cur_w_streak", 0),
+                            "cur_l_streak": sess.get("cur_l_streak", 0),
+                            "max_w_streak": sess.get("max_w_streak", 0),
+                            "max_l_streak": sess.get("max_l_streak", 0)
+                        }
+                    })
 
                 elif kind == "STOP_TRADING" and sid in active_sessions:
-                    safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); }"))
                     active_sessions[sid]["is_trading"] = False
+                    logger.info(f"Trading stopped cleanly for session: {sid}")
 
                 elif kind == "CANCEL_PREPARE" and sid in active_sessions:
                     logger.info(f"Market preparation cancelled by user for session: {sid}")
