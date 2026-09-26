@@ -52,7 +52,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAHIyJ9G0Xsqn9Tnx-1BXNJiJPNdGQJgKO8")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAENtjCFpUrJmSdviu6s_2BieWSgAE-Lyo4")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@bdg_club_707")
@@ -340,7 +340,8 @@ def find_best_worker():
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict) and tinfo.get("status") in ["FREE", "IDLE"]:
                 hb = float(tinfo.get("heartbeat", 0))
-                if now - hb <= 15.0:
+                # 45-second heartbeat window prevents false offline detection during network jitter
+                if now - hb <= 45.0:
                     lat = float(tinfo.get("latency_ms", 9999.0))
                     load = int(tinfo.get("load", 0))
                     candidates.append((tid, load, lat))
@@ -353,7 +354,7 @@ def find_best_worker():
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict):
                 hb = float(tinfo.get("heartbeat", 0))
-                if now - hb <= 15.0:
+                if now - hb <= 45.0:
                     return tid
     return None
 
@@ -367,6 +368,77 @@ def dispatch_task_to_worker(worker_id, task_payload):
 
 def relay_action_to_worker(worker_id, action_payload):
     firebase_sync_http(f"terminals/{worker_id}/action", "PUT", action_payload)
+
+def try_dispatch_session_to_worker(chat_id, sid):
+    sess = active_sessions.get(sid)
+    if not sess:
+        return
+
+    connecting_text = (
+        f"✦︎ <b>{to_bold('CONNECTING REMOTE WORKER ENGINE')}</b> ﴾ 𝟓𝟏𝟐MB ﴿ ✦︎\n\n"
+        f"֎ Platform: <b>{sess.get('site_name', '')}</b>\n"
+        f"<code>Dispatching session to fastest worker node...</code>"
+    )
+    msg_id = sess.get("last_dashboard_msg_id") or sess.get("cred_card_msg_id")
+    if msg_id:
+        try:
+            bot.edit_message_text(connecting_text, chat_id=chat_id, message_id=msg_id)
+            sess["last_dashboard_msg_id"] = msg_id
+        except Exception:
+            m = bot.send_message(chat_id, connecting_text)
+            sess["last_dashboard_msg_id"] = m.message_id
+    else:
+        m = bot.send_message(chat_id, connecting_text)
+        sess["last_dashboard_msg_id"] = m.message_id
+
+    target_worker = find_best_worker()
+    if not target_worker:
+        retry_markup = InlineKeyboardMarkup(row_width=2)
+        retry_markup.add(
+            InlineKeyboardButton(f"🔄 {to_bold('RETRY WORKER SEARCH')}", callback_data=f"retry_worker:{sid}"),
+            InlineKeyboardButton(f"✦︎ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
+        )
+        caption = (
+            f"✦︎ <b>{to_bold('NO WORKERS AVAILABLE')}</b> ﴾ 𝐖𝐎𝐑𝐊𝐄𝐑 𝐎𝐅𝐅𝐋𝐈𝐍𝐄 ﴿ ✦︎\n\n"
+            f"<b>সমস্যাটির কারণ (Cause of Error):</b>\n"
+            f"ক্লাস্টারে কোনো সক্রিয় <code>worker.py</code> ইনস্ট্যান্স পাওয়া যায়নি।\n\n"
+            f"ম্যানেজার (টেলিগ্রাম বট) এবং ওয়ার্কার (হেডলেস ব্রাউজার ইঞ্জিন) দুটি আলাদা ফাইল। আপনি শুধুমাত্র <code>manager.py</code> চালু রেখেছেন, কিন্তু ব্রাউজারে লগইন ও ট্রেড করার জন্য <code>worker.py</code> চালু করেননি।\n\n"
+            f"<b>সমাধান (Solution):</b>\n"
+            f"১. আরেকটি টার্মিনাল বা ব্যাকগ্রাউন্ড সার্ভিসে কমান্ডটি রান করুন:\n"
+            f"<code>python3 worker.py</code>\n\n"
+            f"২. <code>worker.py</code> চালু হওয়া মাত্র নিচের <b>RETRY</b> বাটনে চাপ দিন (ফোন ও পাসওয়ার্ড পুনরায় দিতে হবে না):"
+        )
+        try:
+            bot.edit_message_text(caption, chat_id=chat_id, message_id=sess["last_dashboard_msg_id"], reply_markup=retry_markup)
+        except Exception:
+            bot.send_message(chat_id, caption, reply_markup=retry_markup)
+        return
+
+    sess["assigned_worker"] = target_worker
+    firebase_sync_http(f"sessions/{sid}", "PUT", {
+        "node_id": target_worker,
+        "chat_id": chat_id,
+        "site_name": sess["site_name"],
+        "login_url": sess["login_url"],
+        "wingo_url": sess["wingo_url"],
+        "phone": sess["phone"],
+        "password": sess["password"],
+        "assigned_at": time.time()
+    })
+
+    task_payload = {
+        "type": "LOGIN_AND_PREPARE",
+        "chat_id": chat_id,
+        "session_id": sid,
+        "site_name": sess["site_name"],
+        "login_url": sess["login_url"],
+        "wingo_url": sess["wingo_url"],
+        "phone": sess["phone"],
+        "password": sess["password"],
+        "anim_msg_id": sess["last_dashboard_msg_id"],
+        "dispatched_at": time.time()
+    }
+    dispatch_task_to_worker(target_worker, task_payload)
 
 # ==============================================================================
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
@@ -896,6 +968,10 @@ def handle_callbacks(call):
         prompt_m = bot.send_message(chat_id, f"<b>{to_bold('ACCOUNT PASSWORD')}</b>\nEnter your account password:")
         active_sessions[sid]["temp_prompt_id"] = prompt_m.message_id
 
+    elif action == "retry_worker" and sid in active_sessions:
+        bot.answer_callback_query(call.id, "Searching for online worker node...")
+        try_dispatch_session_to_worker(chat_id, sid)
+
     elif action == "start_cfg" and sid in active_sessions:
         sess = active_sessions[sid]
         sess["last_dashboard_msg_id"] = call.message.message_id
@@ -1149,60 +1225,7 @@ def handle_user_text(message):
     elif input_mode == "WAITING_PASS":
         sess["password"] = text
         sess["input_mode"] = None
-
-        cred_msg_id = sess.get("cred_card_msg_id")
-
-        connecting_text = (
-            f"<b>{to_bold('CONNECTING REMOTE WORKER ENGINE')}</b>\n\n"
-            f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-            f"<code>Dispatching session to fastest worker node...</code>"
-        )
-        if cred_msg_id:
-            try:
-                bot.edit_message_text(connecting_text, chat_id=chat_id, message_id=cred_msg_id)
-                sess["last_dashboard_msg_id"] = cred_msg_id
-            except Exception:
-                anim_msg = bot.send_message(chat_id, connecting_text)
-                sess["last_dashboard_msg_id"] = anim_msg.message_id
-        else:
-            anim_msg = bot.send_message(chat_id, connecting_text)
-            sess["last_dashboard_msg_id"] = anim_msg.message_id
-
-        target_worker = find_best_worker()
-        if not target_worker:
-            bot.edit_message_text(
-                f"<b>{to_bold('NO WORKERS AVAILABLE')}</b>\n\n"
-                f"No active worker nodes found in cluster. Please ensure at least one <code>worker.py</code> instance is running.",
-                chat_id=chat_id,
-                message_id=sess["last_dashboard_msg_id"]
-            )
-            return
-
-        sess["assigned_worker"] = target_worker
-        firebase_sync_http(f"sessions/{sid}", "PUT", {
-            "node_id": target_worker,
-            "chat_id": chat_id,
-            "site_name": sess["site_name"],
-            "login_url": sess["login_url"],
-            "wingo_url": sess["wingo_url"],
-            "phone": sess["phone"],
-            "password": sess["password"],
-            "assigned_at": time.time()
-        })
-
-        task_payload = {
-            "type": "LOGIN_AND_PREPARE",
-            "chat_id": chat_id,
-            "session_id": sid,
-            "site_name": sess["site_name"],
-            "login_url": sess["login_url"],
-            "wingo_url": sess["wingo_url"],
-            "phone": sess["phone"],
-            "password": sess["password"],
-            "anim_msg_id": sess["last_dashboard_msg_id"],
-            "dispatched_at": time.time()
-        }
-        dispatch_task_to_worker(target_worker, task_payload)
+        try_dispatch_session_to_worker(chat_id, sid)
 
     elif input_mode == "WAITING_TARGET":
         try:
