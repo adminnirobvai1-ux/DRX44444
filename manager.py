@@ -52,15 +52,15 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAFWn8thFAmtYwvEsbISVUZJErRwUchSLD0")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAHIyJ9G0Xsqn9Tnx-1BXNJiJPNdGQJgKO8")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
+CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@bdg_club_707")
 CHANNEL_URL = os.environ.get("CHANNEL_URL", "https://t.me/DARK67HACK")
 SUPER_ADMIN_ID = int(os.environ.get("SUPER_ADMIN_ID", 8707571669))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@MD_NAYEEM_DRX_TM")
 
-FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
+FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://server-51888-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 NODE_ID = f"mgr_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
@@ -103,96 +103,8 @@ PLATFORMS = {
 }
 
 # ==============================================================================
-# UNICODE BOLD & STRING DECORATORS (PREMIUM CYBERPUNK MONOCHROME DICTIONARY)
+# UNICODE BOLD & STRING DECORATORS (DESIGN PRESERVED)
 # ==============================================================================
-import math
-
-SYM_HEX_CORE = "⏣"          # Server core & system status
-SYM_SPARK_STAR = "✧"        # Sub-header & progress highlight
-SYM_SOLID_STAR = "✦︎"        # Success & active tracking
-SYM_DIAMOND_ARROW = "⬩➤"    # Action button, START & status headline
-SYM_RIGHT_TRI = "▸"         # Sub-details, log line & CANCEL button
-SYM_COMPASS_FLOWER = "֎"    # Task monitor & admin menu
-SYM_RADIANT_SUN = "𖤓"       # VIP platform & special notifications
-SYM_SLIM_DIAMOND = "⟡"      # Speed test & ping status
-SYM_BRACKET_OPEN = "﴾"      # Ornamental open bracket
-SYM_BRACKET_CLOSE = "﴿"     # Ornamental close bracket
-
-# Bold Math Digits for Balance (𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗)
-BOLD_MATH_DIGITS = {
-    '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒',
-    '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗',
-    '.': '.', ',': ','
-}
-
-def to_math_bold(val) -> str:
-    s = f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
-    return "".join(BOLD_MATH_DIGITS.get(c, c) for c in s)
-
-# Integer Martingale Step Maker Formula
-def calculate_step_maker(current_balance: float, n_steps: int):
-    B = int(math.floor(float(current_balance)))
-    n = max(1, int(n_steps))
-    divisor = (2 ** n) - 1
-    
-    first_step = B // divisor if divisor > 0 else 0
-    
-    # Calculate maximum feasible steps for this balance where first_step >= 1
-    max_steps = 1
-    while ((2 ** (max_steps + 1)) - 1) <= B:
-        max_steps += 1
-    
-    is_valid = first_step >= 1
-    recommended_step = min(max_steps, 6) if max_steps >= 5 else max_steps
-    
-    if not is_valid:
-        return {
-            "is_valid": False,
-            "balance_int": B,
-            "n_steps": n,
-            "divisor": divisor,
-            "first_step": 0,
-            "sequence": [],
-            "total_cost": 0,
-            "reserve": B,
-            "max_steps": max_steps,
-            "recommended_step": recommended_step,
-            "error_msg": f"এই ব্যালেন্স (৳{B}) দিয়ে {n} স্টেপ অসম্ভব! সর্বোচ্চ {max_steps} স্টেপ সম্ভব। প্রস্তাবিত অপটিমাল: {recommended_step} স্টেপ।"
-        }
-    
-    sequence = [first_step * (2 ** i) for i in range(n)]
-    total_cost = sum(sequence)
-    reserve = B - total_cost
-    
-    return {
-        "is_valid": True,
-        "balance_int": B,
-        "n_steps": n,
-        "divisor": divisor,
-        "first_step": first_step,
-        "sequence": sequence,
-        "total_cost": total_cost,
-        "reserve": reserve,
-        "max_steps": max_steps,
-        "recommended_step": n,
-        "error_msg": None
-    }
-
-LOGIN_FRAMES = [
-    f"{SYM_HEX_CORE} {SYM_BRACKET_OPEN} ▰▱▱▱▱▱▱▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₁₅% {SYM_SPARK_STAR} ALLOCATING WORKER NODE",
-    f"{SYM_SPARK_STAR} {SYM_BRACKET_OPEN} ▰▰▱▱▱▱▱▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₃₅% {SYM_SPARK_STAR} INJECTING ENCRYPTED CREDENTIALS",
-    f"{SYM_SPARK_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▱▱▱▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₆₀% {SYM_SPARK_STAR} BYPASSING MODALS & POPUPS",
-    f"{SYM_SOLID_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▰▰▱▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₈₅% {SYM_SPARK_STAR} SYNCHRONIZING SESSION TOKEN",
-    f"{SYM_SOLID_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▰▰▰▰ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₉₉% {SYM_SPARK_STAR} VERIFYING WALLET TELEMETRY"
-]
-
-WINGO_FRAMES = [
-    f"{SYM_HEX_CORE} {SYM_BRACKET_OPEN} ▰▱▰▱▰▱▰▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₂₅% {SYM_SPARK_STAR} NAVIGATING WINGO 30S",
-    f"{SYM_SPARK_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▱▱▱ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₅₀% {SYM_SPARK_STAR} STEP MAKER COMPUTING",
-    f"{SYM_SOLID_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▰▰▰ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₇₅% {SYM_SPARK_STAR} SYNCING WALLET BALANCE",
-    f"{SYM_SOLID_STAR} {SYM_BRACKET_OPEN} ▰▰▰▰▰▰▰▰ {SYM_BRACKET_CLOSE} {SYM_DIAMOND_ARROW} ₁₀₀% {SYM_SPARK_STAR} MARKET ARMED"
-]
-
 def to_bold(text: str) -> str:
     res = []
     for c in str(text):
@@ -296,7 +208,7 @@ def is_user_pass_valid(chat_id):
     return time.time() < u.get("pass_expiry", 0)
 
 # ==============================================================================
-# KEYBOARD MATRICES (DESIGN 100% PRESERVED)
+# KEYBOARD MATRICES (VIP MONOCHROME GLYPH INTEGRATION)
 # ==============================================================================
 def get_credentials_keyboard(sid):
     sess = active_sessions.get(sid, {})
@@ -305,21 +217,21 @@ def get_credentials_keyboard(sid):
 
     if not has_phone:
         markup.add(
-            InlineKeyboardButton(f"{to_bold('NUMBER')}", callback_data=f"ask_num:{sid}"),
-            InlineKeyboardButton(f"{to_bold('PASSWORD')}", callback_data=f"ask_pass:{sid}")
+            InlineKeyboardButton(f"⬩➤ {to_bold('NUMBER')} ▸", callback_data=f"ask_num:{sid}"),
+            InlineKeyboardButton(f"⬩➤ {to_bold('PASSWORD')} ▸", callback_data=f"ask_pass:{sid}")
         )
     else:
         markup.add(
-            InlineKeyboardButton(f"{to_bold('PASSWORD')}", callback_data=f"ask_pass:{sid}")
+            InlineKeyboardButton(f"⬩➤ {to_bold('PASSWORD')} ▸", callback_data=f"ask_pass:{sid}")
         )
-    markup.add(InlineKeyboardButton(f"▸ CANCEL", callback_data=f"cancel:{sid}"))
+    markup.add(InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}"))
     return markup
 
 def get_start_screen_keyboard(sid):
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"⬩➤ START", callback_data=f"start_cfg:{sid}"),
-        InlineKeyboardButton(f"▸ CANCEL", callback_data=f"cancel:{sid}")
+        InlineKeyboardButton(f"⬩➤ {to_bold('START')} ▸", callback_data=f"start_cfg:{sid}"),
+        InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
     )
     return markup
 
@@ -328,8 +240,8 @@ def get_setup_param_keyboard(sid):
     t_val = sess.get("target_profit", 0)
     s_val = sess.get("total_steps", 5)
 
-    t_lbl = f"TARGET: {int(t_val)}" if t_val else "TARGET"
-    s_lbl = f"STEPS: {int(s_val)}" if s_val else "STEPS"
+    t_lbl = f"֎ TARGET: ৳{int(t_val)}" if t_val else "֎ TARGET"
+    s_lbl = f"⏣ STEPS: {int(s_val)}" if s_val else "⏣ STEPS"
 
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -337,58 +249,56 @@ def get_setup_param_keyboard(sid):
         InlineKeyboardButton(f"{to_bold(s_lbl)}", callback_data=f"set_stp:{sid}")
     )
     markup.add(
-        InlineKeyboardButton(f"⬩➤ START", callback_data=f"run_auto:{sid}"),
-        InlineKeyboardButton(f"▸ CANCEL", callback_data=f"cancel:{sid}")
+        InlineKeyboardButton(f"⬩➤ {to_bold('START AUTOMATION')} ▸", callback_data=f"run_auto:{sid}"),
+        InlineKeyboardButton(f"⬩➤ {to_bold('CANCEL')} ✦︎", callback_data=f"cancel:{sid}")
     )
     return markup
 
 def get_trading_control_keyboard(sid):
     sess = active_sessions.get(sid, {})
     sess["anim_tick"] = sess.get("anim_tick", 0) + 1
-    # Braille spinners for low-overhead, periodic animation
-    braille_spinners = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    spinner = braille_spinners[sess["anim_tick"] % len(braille_spinners)]
+    spinner = SPINNER_FRAMES[sess["anim_tick"] % len(SPINNER_FRAMES)]
 
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton("✧ SHOT", callback_data=f"shot:{sid}"),
-        InlineKeyboardButton("⏣ BAL", callback_data=f"bal:{sid}")
+        InlineKeyboardButton(f"⪼ {to_bold('SHOT')}", callback_data=f"shot:{sid}"),
+        InlineKeyboardButton(f"⪼ {to_bold('BAL')}", callback_data=f"bal:{sid}")
     )
     markup.add(
-        InlineKeyboardButton("✦︎ STATS", callback_data=f"stats:{sid}"),
-        InlineKeyboardButton(f" STOP {spinner}", callback_data=f"stop:{sid}")
+        InlineKeyboardButton(f"⟡ {to_bold('STATS')}", callback_data=f"stats:{sid}"),
+        InlineKeyboardButton(f"⬩➤ {to_bold(f'STOP {spinner}')} ✦︎", callback_data=f"stop:{sid}")
     )
     return markup
 
 def get_channel_join_keyboard():
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
-        InlineKeyboardButton(f"{to_bold('JOIN OFFICIAL CHANNEL')}", url=CHANNEL_URL),
-        InlineKeyboardButton(f"{to_bold('VERIFY MEMBERSHIP')}", callback_data="check_channel_joined")
+        InlineKeyboardButton(f"⬩➤ {to_bold('JOIN OFFICIAL CHANNEL')} ▸", url=CHANNEL_URL),
+        InlineKeyboardButton(f"✦︎ {to_bold('VERIFY MEMBERSHIP')} ✦︎", callback_data="check_channel_joined")
     )
     return markup
 
 def get_passkey_gate_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"{to_bold('ENTER PASSKEY')}", callback_data="btn_enter_pass"),
-        InlineKeyboardButton(f"{to_bold('CONTACT OWNER')}", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")
+        InlineKeyboardButton(f"⬩➤ {to_bold('ENTER PASSKEY')} ▸", callback_data="btn_enter_pass"),
+        InlineKeyboardButton(f"⟡ {to_bold('CONTACT OWNER')} ⟡", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")
     )
     return markup
 
 def get_six_platform_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton(f"{to_bold('AMAR CLUB')}", callback_data="site_amarclub"),
-        InlineKeyboardButton(f"{to_bold('DK WIN')}", callback_data="site_dkwin")
+        InlineKeyboardButton(f"֎ {to_bold('AMAR CLUB')} ▸", callback_data="site_amarclub"),
+        InlineKeyboardButton(f"֎ {to_bold('DK WIN')} ▸", callback_data="site_dkwin")
     )
     markup.add(
-        InlineKeyboardButton(f"{to_bold('TIGRO CLUB')}", callback_data="site_tigroclub"),
-        InlineKeyboardButton(f"{to_bold('HG NICE')}", callback_data="site_hgnice")
+        InlineKeyboardButton(f"֎ {to_bold('TIGRO CLUB')} ▸", callback_data="site_tigroclub"),
+        InlineKeyboardButton(f"֎ {to_bold('HG NICE')} ▸", callback_data="site_hgnice")
     )
     markup.add(
-        InlineKeyboardButton(f"{to_bold('KANPUR 91')}", callback_data="site_kanpur91"),
-        InlineKeyboardButton(f"{to_bold('BDG WINS VIP')}", callback_data="site_bdgwinsvip")
+        InlineKeyboardButton(f"֎ {to_bold('KANPUR 91')} ▸", callback_data="site_kanpur91"),
+        InlineKeyboardButton(f"֎ {to_bold('BDG WINS VIP')} ▸", callback_data="site_bdgwinsvip")
     )
     return markup
 
@@ -539,18 +449,57 @@ def worker_events_listener():
                         elif ev_type == "TARGET_ACHIEVED":
                             start_b = float(ev_data.get("start_balance", 0.0))
                             cur_b = float(ev_data.get("final_balance", 0.0))
+                            tgt = float(ev_data.get("target_amount", cur_b))
                             profit = cur_b - start_b
                             w = ev_data.get("wins", 0)
                             l = ev_data.get("losses", 0)
+                            sess["is_trading"] = False
                             msg = (
-                                f"<b>{to_bold('TARGET ACHIEVED SUCCESSFULLY')}</b>\n\n"
-                                f"Your target profit has been fulfilled smoothly.\n\n"
-                                f"Starting Balance: <code>৳ {start_b:.2f}</code>\n"
-                                f"Final Balance: <code>৳ {cur_b:.2f}</code>\n"
-                                f"Net Profit: <code>+৳ {profit:.2f}</code>\n"
-                                f"Total Wins: <b>{w}</b> | Losses: <b>{l}</b>"
+                                f"✦︎ <b>{to_bold('TARGET ACHIEVED')}</b> ﴾ 𝐒𝐔𝐂𝐂𝐄𝐒𝐒 ﴿ ✦︎\n\n"
+                                f"Assalamu Alaikum. Dear Customer, your target profit/balance of <b>৳{int(cur_b)} BDT</b> has been achieved successfully! Automated trading has been safely paused. You may now log in to review and withdraw your funds.\n\n"
+                                f"֎ Starting Balance: <code>৳ {int(start_b)} BDT</code>\n"
+                                f"֎ Target Goal: <code>৳ {int(tgt)} BDT</code>\n"
+                                f"֎ Final Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+                                f"֎ Net Profit: <code>+৳ {int(profit)} BDT</code>\n"
+                                f"֎ Performance: <b>{w}</b> Wins ⪼ <b>{l}</b> Losses\n\n"
+                                f"⬩➤ <i>All instances stopped cleanly. Zero memory leak. Send /start to begin a new session.</i>"
                             )
-                            bot.send_message(chat_id, msg)
+                            last_m = sess.get("last_dashboard_msg_id")
+                            if last_m:
+                                try:
+                                    bot.edit_message_text(msg, chat_id=chat_id, message_id=last_m)
+                                except Exception:
+                                    bot.send_message(chat_id, msg)
+                            else:
+                                bot.send_message(chat_id, msg)
+
+                        elif ev_type == "CIRCUIT_BREAKER_TRIGGERED":
+                            site_name = ev_data.get("site_name", "")
+                            start_b = float(ev_data.get("start_balance", 0.0))
+                            cur_b = float(ev_data.get("final_balance", 0.0))
+                            step = ev_data.get("step", 5)
+                            tot_steps = ev_data.get("total_steps", 5)
+                            w = ev_data.get("wins", 0)
+                            l = ev_data.get("losses", 0)
+                            sess["is_trading"] = False
+                            cb_msg = (
+                                f"<b>{to_bold('CIRCUIT BREAKER TRIGGERED - CAPITAL PROTECTED')}</b>\n\n"
+                                f"<b>Protection Notice:</b> Loss reached the final tier (<b>Step {step} of {tot_steps}</b>).\n"
+                                f"Trading has been <b>AUTOMATICALLY STOPPED</b> to preserve capital and prevent balance liquidation.\n\n"
+                                f"Platform: <b>{site_name}</b>\n"
+                                f"Starting Balance: <code>৳ {int(start_b)} BDT</code>\n"
+                                f"Preserved Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+                                f"Total Wins: <b>{w}</b> | Losses: <b>{l}</b>\n\n"
+                                f"Send /start to reconfigure or restart trading."
+                            )
+                            last_m = sess.get("last_dashboard_msg_id")
+                            if last_m:
+                                try:
+                                    bot.edit_message_text(cb_msg, chat_id=chat_id, message_id=last_m)
+                                except Exception:
+                                    bot.send_message(chat_id, cb_msg)
+                            else:
+                                bot.send_message(chat_id, cb_msg)
 
                         elif ev_type == "LIVE_TELEMETRY":
                             cur_b = float(ev_data.get("current_balance", 0.0))
@@ -565,12 +514,12 @@ def worker_events_listener():
                             report = (
                                 f"<b>{to_bold('24/7 GHOST ENGINE ACTIVE')}</b>\n\n"
                                 f"Platform: <b>{ev_data.get('site_name', sess.get('site_name', ''))}</b>\n"
-                                f"Live Balance: <code>৳ {cur_b:.2f}</code>\n"
-                                f"Target Goal: <code>৳ {t_tot:.2f}</code>\n"
+                                f"Live Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+                                f"Target Goal: <code>৳ {int(t_tot)} BDT</code>\n"
                                 f"Current Step: <b>Step {step}</b>\n"
                                 f"Wins: <b>{w}</b> | Losses: <b>{l}</b>\n"
                                 f"Timestamp: <code>{time.strftime('%H:%M:%S')}</code>\n\n"
-                                f"<b>LIVE STATUS</b>: High-frequency martingale execution active."
+                                f"<b>LIVE STATUS</b>: Martingale Step Money Management active (Zero paisa / BDT)."
                             )
                             last_m = sess.get("last_dashboard_msg_id")
                             if last_m:
@@ -590,7 +539,7 @@ def worker_events_listener():
                             cid = ev_data.get("call_id")
                             if cid:
                                 try:
-                                    bot.answer_callback_query(cid, f"Live Balance: ৳ {bal:.2f}", show_alert=True)
+                                    bot.answer_callback_query(cid, f"Live Balance: ৳ {int(bal)} BDT", show_alert=True)
                                 except Exception:
                                     pass
 
@@ -601,8 +550,8 @@ def worker_events_listener():
                             sess["cur_bal"] = cur_b
                             stat_txt = (
                                 f"<b>{to_bold('LIVE STATS REPORT')}</b>\n\n"
-                                f"Balance: <code>৳ {cur_b:.2f}</code>\n"
-                                f"Target: <code>৳ {d.get('tgtAmt', 0):.2f}</code>\n"
+                                f"Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+                                f"Target: <code>৳ {int(d.get('tgtAmt', 0))} BDT</code>\n"
                                 f"Current Martingale Step: <b>Step {d.get('step', 1)} / {d.get('steps', 5)}</b>\n"
                                 f"Wins: <b>{d.get('w', 0)}</b> | Losses: <b>{d.get('l', 0)}</b>\n"
                                 f"Win Streak: <b>{d.get('cur_w_streak', 0)}</b> (Max: {d.get('max_w_streak', 0)})\n"
@@ -975,7 +924,7 @@ def handle_callbacks(call):
         user_sessions[chat_id]["active_sid"] = sid
         bot.answer_callback_query(call.id)
         cur_bal = active_sessions[sid].get("current_balance", 0.0)
-        p_msg = bot.send_message(chat_id, f"<b>{to_bold('TARGET PROFIT')}</b>\nLive Balance: <code>৳ {cur_bal:.2f}</code>\nEnter profit amount (e.g. <code>250</code>):")
+        p_msg = bot.send_message(chat_id, f"<b>{to_bold('TARGET PROFIT (BDT ৳)')}</b>\nLive Balance: <code>৳ {int(cur_bal)} BDT</code>\nEnter profit amount in BDT without paisa (e.g. <code>250</code>):")
         active_sessions[sid]["temp_prompt_id"] = p_msg.message_id
 
     elif action == "set_stp" and sid in active_sessions:
@@ -983,7 +932,7 @@ def handle_callbacks(call):
         active_sessions[sid]["last_dashboard_msg_id"] = call.message.message_id
         user_sessions[chat_id]["active_sid"] = sid
         bot.answer_callback_query(call.id)
-        p_msg = bot.send_message(chat_id, f"<b>{to_bold('MARTINGALE STEPS')}</b>\nEnter step count (e.g. <code>5</code> or <code>7</code>):")
+        p_msg = bot.send_message(chat_id, f"<b>{to_bold('STEP MONEY MANAGEMENT')}</b>\nEnter number of Martingale steps N (e.g. <code>4</code>, <code>5</code>, <code>6</code>):")
         active_sessions[sid]["temp_prompt_id"] = p_msg.message_id
 
     elif action == "run_auto" and sid in active_sessions:
@@ -999,8 +948,8 @@ def handle_callbacks(call):
                 "kind": "START_TRADING",
                 "session_id": sid,
                 "chat_id": chat_id,
-                "target_profit": sess["target_profit"],
-                "total_steps": sess["total_steps"],
+                "target_profit": int(sess["target_profit"]),
+                "total_steps": int(sess["total_steps"]),
                 "prediction_api_url": PREDICTION_API_URL
             })
 
@@ -1012,10 +961,10 @@ def handle_callbacks(call):
         dashboard_caption = (
             f"<b>{to_bold('24/7 GHOST ENGINE ACTIVE')}</b>\n\n"
             f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-            f"Starting Balance: <code>৳ {cur_b:.2f}</code>\n"
-            f"Target Balance: <code>৳ {target_total:.2f}</code>\n"
-            f"Total Steps: <b>{sess['total_steps']}</b>\n\n"
-            f"<b>LIVE STATUS</b>: Martingale engine running in ghost background mode."
+            f"Starting Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+            f"Target Balance: <code>৳ {int(target_total)} BDT</code>\n"
+            f"Configured Steps: <b>{sess['total_steps']} Steps</b>\n\n"
+            f"<b>LIVE STATUS</b>: Dynamic Step Money Management active in silent background mode."
         )
 
         target_m_id = call.message.message_id or sess.get("last_dashboard_msg_id")
@@ -1086,11 +1035,14 @@ def handle_callbacks(call):
                 "chat_id": chat_id
             })
         sess["is_trading"] = False
-        bot.answer_callback_query(call.id, "Trading paused cleanly", show_alert=True)
+        bot.answer_callback_query(call.id, "Trading halted cleanly", show_alert=True)
+        cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
         stop_caption = (
-            f"<b>{to_bold('TRADING PAUSED')}</b>\n\n"
-            f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-            f"Automation paused cleanly."
+            f"✦︎ <b>{to_bold('TRADING HALTED')}</b> ﴾ 𝐒𝐓𝐎𝐏𝐏𝐄𝐃 ﴿ ✦︎\n\n"
+            f"֎ Platform: <b>{sess.get('site_name', '')}</b>\n"
+            f"֎ Preserved Balance: <code>৳ {int(cur_b)} BDT</code>\n"
+            f"֎ Status: <b>Memory Cleared & Instance Released</b>\n\n"
+            f"⬩➤ <i>Zero ghost processes. Send /start to initiate a new session.</i>"
         )
         try:
             bot.edit_message_text(stop_caption, chat_id=chat_id, message_id=call.message.message_id)
@@ -1105,10 +1057,10 @@ def handle_callbacks(call):
                 "session_id": sid,
                 "chat_id": chat_id
             })
-        bot.answer_callback_query(call.id, "Session terminated")
+        bot.answer_callback_query(call.id, "Session terminated cleanly")
         active_sessions.pop(sid, None)
         safe_delete_message(chat_id, call.message.message_id)
-        bot.send_message(chat_id, f"<b>{to_bold('SESSION TERMINATED')}</b>\nSend /start to begin a new session.")
+        bot.send_message(chat_id, f"✦︎ <b>{to_bold('SESSION TERMINATED')}</b> ﴾ 𝐂𝐋𝐄𝐀𝐑𝐄𝐃 ﴿ ✦︎\n\n⬩➤ <i>All active async requests aborted and memory freed. Send /start to begin a new session.</i>")
 
 # ==============================================================================
 # USER TEXT INPUT HANDLER
@@ -1263,8 +1215,8 @@ def handle_user_text(message):
             config_caption = (
                 f"<b>{to_bold('WINGO 30S MARKET ACTIVE')}</b>\n\n"
                 f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-                f"Live Balance: <code>৳ {cur_bal:.2f}</code>\n"
-                f"Selected Target: <code>৳ {val:.2f}</code>\n\n"
+                f"Live Balance: <code>৳ {int(cur_bal)} BDT</code>\n"
+                f"Selected Target: <code>৳ {int(val)} BDT</code>\n\n"
                 f"Parameters updated. Click <b>START</b> to initiate trading:"
             )
 
@@ -1291,35 +1243,17 @@ def handle_user_text(message):
         try:
             steps_val = int(text)
             if steps_val <= 0: raise ValueError()
+            sess["total_steps"] = steps_val
+            sess["input_mode"] = None
+
             cur_bal = sess.get("current_balance", 0.0)
-            
-            step_calc = calculate_step_maker(cur_bal, steps_val)
-            
-            if not step_calc["is_valid"] and cur_bal > 0:
-                rec_step = step_calc["recommended_step"]
-                sess["total_steps"] = rec_step
-                sess["input_mode"] = None
-                config_caption = (
-                    f"<b>{SYM_HEX_CORE} {SYM_BRACKET_OPEN} STEP MAKER WARNING {SYM_BRACKET_CLOSE}</b>\n\n"
-                    f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-                    f"Live Balance: <code>৳ {to_math_bold(cur_bal)} BDT</code>\n\n"
-                    f"⚠️ <i>{step_calc['error_msg']}</i>\n"
-                    f"⬩➤ স্বয়ংক্রিয়ভাবে সর্বোত্তম <b>{rec_step} স্টেপ</b> নির্ধারণ করা হয়েছে।\n\n"
-                    f"Click <b>START</b> to initiate trading:"
-                )
-            else:
-                sess["total_steps"] = steps_val
-                sess["input_mode"] = None
-                seq_str = ", ".join(str(s) for s in step_calc.get("sequence", []))
-                config_caption = (
-                    f"<b>{SYM_HEX_CORE} {SYM_BRACKET_OPEN} WINGO 30S MARKET ACTIVE {SYM_BRACKET_CLOSE}</b>\n\n"
-                    f"Platform: <b>{sess.get('site_name', '')}</b>\n"
-                    f"Live Balance: <code>৳ {to_math_bold(cur_bal)} BDT</code>\n"
-                    f"Selected Steps: <b>{steps_val}</b> (Divisor: {step_calc.get('divisor', 0)})\n"
-                    f"Martingale Sequence: <code>[{seq_str}]</code>\n"
-                    f"Total Required: <code>৳ {step_calc.get('total_cost', 0)}</code> | Reserve: <code>৳ {step_calc.get('reserve', 0)}</code>\n\n"
-                    f"Parameters verified. Click <b>START</b> to initiate trading:"
-                )
+            config_caption = (
+                f"<b>{to_bold('WINGO 30S MARKET ACTIVE')}</b>\n\n"
+                f"Platform: <b>{sess.get('site_name', '')}</b>\n"
+                f"Live Balance: <code>৳ {int(cur_bal)} BDT</code>\n"
+                f"Selected Steps: <b>{steps_val} Steps</b>\n\n"
+                f"Parameters updated. Click <b>START</b> to initiate trading:"
+            )
 
             last_msg_id = sess.get("last_dashboard_msg_id")
             if last_msg_id:
