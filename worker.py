@@ -672,12 +672,12 @@ return 0.0;
 """
 
 # ==============================================================================
-# CONTINUOUS CONSECUTIVE 30-SECOND BETTING ENGINE (ELIMINATES TRADE SKIPPING)
+# 9. INTEGRATED FULL 24/7 INVISIBLE GHOST EXECUTION (WITH 5S FREEZE GUARD & API SYNC)
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
 const autoTotalSteps = parseInt(arguments[1]) || 5;
-const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
+const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
 
 (function(){
     let ghostContainer = document.getElementById('sys-core-fin');
@@ -689,9 +689,10 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     }
 
     if (window.__WINGO_ST && window.__WINGO_ST.isRun) {
-        window.__WINGO_ST.steps = Math.max(1, autoTotalSteps);
-        if (autoTargetGoal > 0) {
-            window.__WINGO_ST.tgtAmt = autoTargetGoal;
+        window.__WINGO_ST.steps = Math.max(1, parseInt(autoTotalSteps) || 5);
+        if (autoTargetGoal && autoTargetGoal > 0) {
+            let liveBal = (typeof chkBal === 'function') ? chkBal() : window.__WINGO_ST.curBal;
+            window.__WINGO_ST.tgtAmt = (autoTargetGoal <= liveBal && liveBal > 0) ? (liveBal + autoTargetGoal) : autoTargetGoal;
         }
         return "ALREADY_RUNNING_UPDATED";
     }
@@ -700,20 +701,20 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         clearInterval(window.__WINGO_ST.autoInt);
     }
 
+    const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
     const st = {
         isRun: true,
-        tgtAmt: autoTargetGoal,
-        startBal: 0.0,
-        curBal: 0.0,
+        tgtAmt: 0,
+        startBal: 0,
+        curBal: 0,
         autoInt: null,
         isTrd: false,
         stpIdx: 0,
-        steps: Math.max(1, autoTotalSteps),
+        steps: Math.max(1, parseInt(autoTotalSteps) || 5),
         dynSeq: [],
         tradesDone: 0,
         lastPred: null,
         lastPeriod: null,
-        lastBetPeriod: null,
         circuitBreakerTriggered: false,
         w: 0,
         l: 0,
@@ -724,7 +725,6 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     };
     window.__WINGO_ST = st;
 
-    // Live balance inspector - captures decimals/paisa accurately
     function chkBal() {
         try {
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
@@ -739,7 +739,7 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     }
                 }
             }
-            let els = document.querySelectorAll('span, div, p');
+            let els = document.querySelectorAll('*');
             for (let i = 0; i < els.length; i++) {
                 let txt = els[i].innerText || '';
                 if (txt.includes('Wallet balance') || txt.includes('Balance')) {
@@ -751,11 +751,18 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     }
                 }
             }
+            for (let i = 0; i < els.length; i++) {
+                let txt = els[i].innerText || '';
+                if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
+                    st.curBal = parseFloat(txt.replace(/[^\d.]/g, ''));
+                    return st.curBal;
+                }
+            }
         } catch(e) {}
-        return st.curBal || 0.0;
+        return st.curBal || 0;
     }
 
-    // WinGo 30S Countdown Inspector
+    // WinGo 30s Countdown Inspector to bypass betting in the 5-second freeze
     function getRemainingSeconds() {
         try {
             let timeEl = document.querySelector('.time-box, [class*="time" i], .Time');
@@ -770,44 +777,40 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         return 30;
     }
 
-    // WinGo Current Period Inspector from DOM with fallback to 30s Epoch Round
-    function getLiveRoundId() {
-        try {
-            // 1. Scan for the 15-20 digit live period number on the page
-            let allTextEls = document.querySelectorAll('div, span, p, h3');
-            for (let i = 0; i < allTextEls.length; i++) {
-                let t = (allTextEls[i].innerText || '').trim();
-                if (/^20\d{12,18}$/.test(t) && allTextEls[i].children.length === 0) {
-                    return t;
-                }
-            }
-            let pEl = document.querySelector('.Game__C-title-sub, .Time__C-num, [class*="period" i], [class*="issue" i]');
-            if (pEl) {
-                let m = (pEl.innerText || '').match(/(\d{12,20})/);
-                if (m) return m[1];
-            }
-        } catch(e){}
-        // Fallback: 30-second epoch clock (guarantees a new distinct round every 30s regardless of DOM)
-        return 'EPOCH_' + Math.floor(Date.now() / 30000);
-    }
-
-    // STRICT MARTINGALE RATIO MODEL:
-    // 1. Total Ratio Divisor: R = 2^N - 1
-    // 2. Step 1 Base Amount: S_1 = floor(Account Balance / R)
-    // 3. Subsequent Steps: S_k = S_{k-1} * 2
-    // 4. Strict Zero-Paisa Rule: All bet amounts are strictly floor integers
     const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 100;
+        let B = Math.floor(Number(cBal)) || 0;
         let n = parseInt(nSteps) || 5;
         if (n < 1) n = 1;
-        let R = Math.pow(2, n) - 1;
-        let s1 = Math.floor(B / R);
+        let u = Math.pow(2, n) - 1;
+        let s1 = Math.floor(B / u);
         if (s1 < 1) s1 = 1;
-        let seq = [s1];
+        let seq = [];
+        let sum = 0;
         for (let k = 1; k < n; k++) {
-            seq.push(seq[k - 1] * 2);
+            let sk = Math.floor(s1 * Math.pow(2, k - 1));
+            seq.push(sk);
+            sum += sk;
         }
+        let sn = Math.floor(B - sum);
+        seq.push(sn > 0 ? sn : Math.floor(s1 * Math.pow(2, n - 1)));
         return seq;
+    };
+
+    const getNextLivePeriod = (str) => {
+        let chars = String(str).split('');
+        for (let i = chars.length - 1; i >= 0; i--) {
+            if (chars[i] !== '9') {
+                chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+                return chars.join('');
+            }
+            chars[i] = '0';
+        }
+        return '1' + chars.join('');
+    };
+
+    const drx_triggerEvent = (el, etype) => {
+        let ev = new Event(etype, { bubbles: true, cancelable: true });
+        el.dispatchEvent(ev);
     };
 
     const drx_simClick = (el) => {
@@ -822,9 +825,17 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         }
     };
 
-    // Fast, non-blocking trade execution: completed in <350ms
-    const exeTrdFast = (pred, amt, cb) => {
+    // Robust, non-skipping trade executor:
+    // Identifies buttons, handles Vant UI slide-up animation, inputs amount, clicks confirm
+    const exeTrd = (pred, amt, cb) => {
         try {
+            // Guard: Never place bet during locked last 5 seconds of round
+            let remSec = getRemainingSeconds();
+            if (remSec <= 5 && remSec > 0) {
+                if (cb) cb(false);
+                return;
+            }
+
             // Dismiss any lingering overlay first so buttons are 100% clickable
             let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
             if (lingeringDialog) {
@@ -833,8 +844,8 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 try { lingeringDialog.remove(); } catch(e){}
             }
 
-            let targetText = String(pred).toLowerCase().trim();
             let btn = null;
+            let targetText = String(pred).toLowerCase().trim();
             let btns = document.querySelectorAll('button, div, span');
             for (let i = 0; i < btns.length; i++) {
                 let t = (btns[i].innerText || '').trim().toLowerCase();
@@ -844,8 +855,8 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 }
             }
             if (!btn) {
-                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i]');
-                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i]');
+                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i], div[class*="big" i]');
+                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i], div[class*="small" i]');
                 else if (targetText === 'green') btn = document.querySelector('button[class*="green"], div[class*="green"]');
                 else if (targetText === 'red') btn = document.querySelector('button[class*="red"], div[class*="red"]');
                 else if (targetText === 'violet') btn = document.querySelector('button[class*="violet"], div[class*="violet"]');
@@ -854,48 +865,45 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 if (cb) cb(false);
                 return;
             }
-
             drx_simClick(btn);
 
-            // Instant modal field population
-            setTimeout(() => {
-                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
-                if (inpEl) {
-                    inpEl.focus();
-                    let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-                    if (setV) setV.call(inpEl, String(amt));
-                    else inpEl.value = amt;
-                    inpEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    inpEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-
-                // Confirm bet button click
-                setTimeout(() => {
-                    let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
-                    if (!dEl) {
-                        let docButtons = document.querySelectorAll('button, div[role="button"]');
-                        for (let b of docButtons) {
-                            let txt = (b.innerText || '').toLowerCase();
-                            if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
-                                dEl = b;
-                                break;
+            // Interval-based waiting for Vant UI modal & stepper input to fully mount
+            let checkAttempts = 0;
+            let valInterval = setInterval(() => {
+                checkAttempts++;
+                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric']");
+                if (inpEl || checkAttempts > 18) {
+                    clearInterval(valInterval);
+                    if (inpEl) {
+                        inpEl.focus();
+                        let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                        if (setV) setV.call(inpEl, String(amt));
+                        else inpEl.value = amt;
+                        drx_triggerEvent(inpEl, 'input');
+                        drx_triggerEvent(inpEl, 'change');
+                        drx_triggerEvent(inpEl, 'blur');
+                    }
+                    setTimeout(() => {
+                        let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
+                        if (!dEl) {
+                            let docButtons = document.querySelectorAll('button, div[role="button"]');
+                            for (let b of docButtons) {
+                                let txt = (b.innerText || '').toLowerCase();
+                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
+                                    dEl = b;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    if (dEl) {
-                        drx_simClick(dEl);
-                    }
-
-                    // Clean up modal backdrop after bet placement
-                    setTimeout(() => {
-                        let overlay = document.querySelector('.van-overlay');
-                        if (overlay) {
-                            try { overlay.click(); } catch(e){}
+                        if (dEl) {
+                            drx_simClick(dEl);
                         }
-                        if (cb) cb(true);
-                    }, 120);
-                }, 160);
-            }, 100);
+                        setTimeout(() => {
+                            if (cb) cb(true);
+                        }, 1800);
+                    }, 700);
+                }
+            }, 180);
         } catch(e) {
             if (cb) cb(false);
         }
@@ -904,27 +912,21 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
-    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : 100, st.steps);
+    let targetProfitVal = parseFloat(autoTargetGoal) || 0;
+    st.tgtAmt = (targetProfitVal <= initialBal && initialBal > 0) ? (initialBal + targetProfitVal) : targetProfitVal;
+    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : st.tgtAmt, st.steps);
     st.stpIdx = 0;
+    sessionStorage.removeItem('drx_sig');
 
     let isFetchingApi = false;
 
-    // =========================================================================
-    // 1-SECOND REAL-TIME API POLLING & INSTANT TRADE DISPATCH LOOP
-    // Calls API every 1000ms (every second)
-    // Instantly triggers automated bet when new period prediction is received
-    // =========================================================================
-    const apiSecondPollTask = async () => {
-        if (!st.isRun || isFetchingApi) return;
+    // 24/7 API Polling & Real-time Trade Dispatch Loop (Runs every 1000ms)
+    const apiLoopTask = async () => {
+        if (!st.isRun || st.isTrd || isFetchingApi) return;
         isFetchingApi = true;
 
         try {
-            let liveB = chkBal();
-            if (liveB > 0 && st.startBal <= 0) {
-                st.startBal = liveB;
-            }
-
-            // Target Achievement Check: If current balance reached or exceeded target goal
+            chkBal();
             if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0) {
                 st.isRun = false;
                 st.isTrd = false;
@@ -933,141 +935,164 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                 return;
             }
 
-            // 1. Fetch API every second with cache-busting timestamp
-            let fetchUrl = "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json?t=" + Date.now();
-            let rawJson = null;
+            let ts = Math.floor(Date.now() / 1000);
+            let sep = targetApiUrl.includes('?') ? '&' : '?';
+            let fetchUrl = targetApiUrl + sep + "page=1&ts=" + ts;
+            let dataArray = null;
+
             try {
                 let res = await fetch(fetchUrl);
                 if (res.ok) {
-                    rawJson = await res.json();
+                    dataArray = await res.json();
                 }
             } catch(fetchErr) {
-                // Transient network glitch - auto recovery on next second
-                isFetchingApi = false;
-                return;
+                // Secondary fallback attempt if primary endpoint has momentary network error
+                try {
+                    let fallbackUrl = "https://data-vip-247-hack.ai.studio/apipid.json?page=1&ts=" + ts;
+                    let res2 = await fetch(fallbackUrl);
+                    if (res2.ok) dataArray = await res2.json();
+                } catch(e2){}
             }
 
-            if (!rawJson) {
-                isFetchingApi = false;
-                return;
-            }
+            if (dataArray) {
+                let activeLogic = Array.isArray(dataArray) ? dataArray[0] : (dataArray.data ? dataArray.data[0] : dataArray);
+                if (activeLogic) {
+                    let tempHist = activeLogic.history || (activeLogic.data && activeLogic.data.history) || [];
+                    let cSig = '';
+                    if (tempHist[0] && (tempHist[0].pid || tempHist[0].period)) {
+                        cSig = getNextLivePeriod(String(tempHist[0].pid || tempHist[0].period));
+                    }
+                    if (!cSig && activeLogic.next && (activeLogic.next.period || activeLogic.next.pid)) {
+                        cSig = String(activeLogic.next.period || activeLogic.next.pid);
+                    }
+                    if (!cSig && activeLogic.period) {
+                        cSig = String(activeLogic.period);
+                    }
+                    let sSig = sessionStorage.getItem('drx_sig');
 
-            let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
-            let histArray = rawJson.history || (rawJson.data && rawJson.data.history) || [];
-
-            // Extract incoming period and prediction size from API
-            let incomingPeriod = (nextObj && nextObj.period) ? String(nextObj.period).trim() : null;
-            let rawPred = (nextObj && (nextObj.size || nextObj.pred)) || rawJson.size || rawJson.pred || 'BIG';
-            let incomingPred = String(rawPred).toUpperCase().trim();
-
-            if (!incomingPeriod) {
-                isFetchingApi = false;
-                return;
-            }
-
-            // 2. CHECK IF NEW PERIOD ARRIVED IN API
-            if (incomingPeriod !== st.lastBetPeriod) {
-                // Guard: Do not place bet in the locked last 4 seconds
-                let remSec = getRemainingSeconds();
-                if (remSec <= 4 && remSec >= 0) {
-                    isFetchingApi = false;
-                    return;
-                }
-
-                // A. EVALUATE PREVIOUS ROUND RESULT (Step Management)
-                if (st.lastPred && st.lastBetPeriod) {
-                    let won = false;
-
-                    // Priority 1: Check balance increase
-                    let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
-                    if (prevRecordedBal > 0 && liveB > prevRecordedBal) {
-                        won = true;
-                    } else {
-                        // Priority 2: Match previous period in API history
-                        let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod)) || histArray[0];
-                        if (finishedItem) {
-                            let actualSize = '';
-                            if (finishedItem.actual_size) {
-                                actualSize = String(finishedItem.actual_size).toUpperCase().trim();
-                            } else if (typeof finishedItem.actual === 'number') {
-                                actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
-                            } else if (finishedItem.actual) {
-                                let actStr = String(finishedItem.actual).toUpperCase().trim();
-                                if (actStr === 'BIG' || actStr === 'SMALL') actualSize = actStr;
-                                else if (!isNaN(parseInt(actStr))) actualSize = parseInt(actStr) >= 5 ? 'BIG' : 'SMALL';
+                    if (cSig && cSig !== sSig) {
+                        // A. Evaluate Previous Round Result
+                        if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
+                            let actualData = tempHist[0];
+                            let actualR = '';
+                            if (actualData) {
+                                if (actualData.actual_size) {
+                                    actualR = String(actualData.actual_size).toUpperCase().trim();
+                                } else if (actualData.actual === 'BIG' || actualData.actual === 1 || (typeof actualData.actual === 'number' && actualData.actual >= 5)) {
+                                    actualR = 'BIG';
+                                } else if (actualData.actual === 'SMALL' || actualData.actual === 0 || (typeof actualData.actual === 'number' && actualData.actual < 5)) {
+                                    actualR = 'SMALL';
+                                }
+                            }
+                            let won = false;
+                            if (actualR) {
+                                won = (st.lastPred === actualR);
+                            } else {
+                                let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
+                                if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
+                                    won = true;
+                                }
                             }
 
-                            if (finishedItem.status) {
-                                let statStr = String(finishedItem.status).toUpperCase();
-                                if (statStr === 'WIN') won = true;
-                                else if (statStr === 'LOSS') won = false;
-                                else won = (st.lastPred === actualSize);
+                            if (won) {
+                                st.w++;
+                                st.cur_w_streak++;
+                                st.cur_l_streak = 0;
+                                if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                                st.stpIdx = 0;
                             } else {
-                                won = (st.lastPred === actualSize);
+                                st.l++;
+                                st.cur_l_streak++;
+                                st.cur_w_streak = 0;
+                                if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+
+                                // Max Step Failure (Circuit Breaker)
+                                if (st.stpIdx >= st.steps - 1) {
+                                    st.circuitBreakerTriggered = true;
+                                    st.isRun = false;
+                                    st.isTrd = false;
+                                    if (st.autoInt) clearInterval(st.autoInt);
+                                    isFetchingApi = false;
+                                    return;
+                                } else {
+                                    st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
+                                }
                             }
                         }
-                    }
 
-                    if (won) {
-                        st.w++;
-                        st.cur_w_streak++;
-                        st.cur_l_streak = 0;
-                        if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                        // On Win: Reset back to Step 1 (Index 0)
-                        st.stpIdx = 0;
-                        st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
-                    } else {
-                        st.l++;
-                        st.cur_l_streak++;
-                        st.cur_w_streak = 0;
-                        if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+                        st.lastPred = null;
+                        st.lastPeriod = cSig;
+                        st.isTrd = true;
 
-                        // Circuit Breaker on max step failure
-                        if (st.stpIdx >= st.steps - 1) {
-                            st.circuitBreakerTriggered = true;
-                            st.isRun = false;
+                        let nBal = chkBal();
+                        if (st.tgtAmt > 0 && nBal >= st.tgtAmt && st.startBal > 0) {
                             st.isTrd = false;
-                            if (st.autoInt) clearInterval(st.autoInt);
                             isFetchingApi = false;
                             return;
-                        } else {
-                            // On Loss: Advance to next step (Step k + 1)
-                            st.stpIdx = st.stpIdx + 1;
                         }
+
+                        st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
+                        if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
+                        let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+
+                        if (nBal > 0 && nBal < tAmt) {
+                            st.stpIdx = 0;
+                            st.isTrd = false;
+                            isFetchingApi = false;
+                            return;
+                        }
+
+                        // Allow 1.8s for platform to settle into new round, then dispatch trade
+                        setTimeout(() => {
+                            let rawPred = activeLogic.pred || activeLogic.prediction || (activeLogic.next && (activeLogic.next.size || activeLogic.next.pred)) || 'BIG';
+                            let prediction = String(rawPred).toUpperCase().trim();
+                            if (prediction === 'SKIP') {
+                                st.lastPred = null;
+                                sessionStorage.setItem('drx_sig', cSig);
+                                setTimeout(() => { st.isTrd = false; }, 1000);
+                            } else {
+                                if (!['BIG', 'SMALL'].includes(prediction)) {
+                                    prediction = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
+                                }
+                                st.lastPred = prediction;
+                                exeTrd(prediction, tAmt, (suc) => {
+                                    if (suc) {
+                                        sessionStorage.setItem('drx_sig', cSig);
+                                        sessionStorage.setItem('drx_p_bal', String(st.curBal));
+                                        st.tradesDone++;
+                                    } else {
+                                        st.lastPred = null;
+                                    }
+                                    setTimeout(() => { st.isTrd = false; }, 1000);
+                                });
+                            }
+                        }, 1800);
                     }
                 }
-
-                // B. CALCULATE BET AMOUNT (Zero Paisa Rule: Strict floor integer)
-                let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-
-                if (!['BIG', 'SMALL'].includes(incomingPred)) {
-                    incomingPred = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
-                }
-
-                // C. SUBMIT BET IMMEDIATELY
-                st.isTrd = true;
-                st.lastPred = incomingPred;
-                st.lastBetPeriod = incomingPeriod;
-                sessionStorage.setItem('drx_prev_bal', String(liveB));
-
-                exeTrdFast(incomingPred, betAmt, (success) => {
-                    if (success) {
-                        st.tradesDone++;
-                    }
-                    st.isTrd = false;
-                });
             }
-
-        } catch(err) {
+        } catch(e) {
             st.isTrd = false;
         }
-
         isFetchingApi = false;
     };
 
-    // Strict 1-second continuous polling: calls API every 1000ms
-    st.autoInt = setInterval(apiSecondPollTask, 1000);
-    return "1_SECOND_API_POLLING_GHOST_TRADING_INITIATED";
+    // 15-second trade-lock watchdog (prevents st.isTrd from staying stuck)
+    let tradeLockTs = 0;
+    setInterval(() => {
+        if (st.isTrd) {
+            if (!tradeLockTs) tradeLockTs = Date.now();
+            else if (Date.now() - tradeLockTs > 15000) {
+                st.isTrd = false;
+                isFetchingApi = false;
+                tradeLockTs = 0;
+            }
+        } else {
+            tradeLockTs = 0;
+        }
+    }, 3000);
+
+    st.autoInt = setInterval(apiLoopTask, 1000);
+    return "GHOST_TRADING_INITIATED_24_7";
 })();
 """
 
