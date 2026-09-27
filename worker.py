@@ -672,12 +672,13 @@ return 0.0;
 """
 
 # ==============================================================================
-# 9. INTEGRATED FULL 24/7 INVISIBLE GHOST EXECUTION (WITH 5S FREEZE GUARD & API SYNC)
+# 9. INTEGRATED 24/7 NON-STOP GHOST TRADING ENGINE (ZERO-SKIP & STAGGERED 1S API)
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
 const autoTotalSteps = parseInt(arguments[1]) || 5;
-const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
+const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dpjebg2ugq2r.edgeone.dev/apipid.json";
+const workerIdentifier = arguments[3] || "";
 
 (function(){
     let ghostContainer = document.getElementById('sys-core-fin');
@@ -701,7 +702,23 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         clearInterval(window.__WINGO_ST.autoInt);
     }
 
-    const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
+    // Dynamic Stagger Distribution across 12 slots (80ms spacing across 1000ms window)
+    // Ensures multiple worker nodes/tabs poll independently without hammering or lagging server
+    let instSlot = 0;
+    if (typeof workerIdentifier === 'number') {
+        instSlot = Math.abs(workerIdentifier) % 12;
+    } else if (typeof workerIdentifier === 'string' && workerIdentifier.length > 0) {
+        let hash = 0;
+        for (let i = 0; i < workerIdentifier.length; i++) {
+            hash = ((hash << 5) - hash) + workerIdentifier.charCodeAt(i);
+            hash |= 0;
+        }
+        instSlot = Math.abs(hash) % 12;
+    } else {
+        instSlot = Math.floor(Math.random() * 12);
+    }
+    const staggerOffsetMs = instSlot * 80;
+
     const st = {
         isRun: true,
         tgtAmt: 0,
@@ -713,15 +730,19 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         steps: Math.max(1, parseInt(autoTotalSteps) || 5),
         dynSeq: [],
         tradesDone: 0,
-        lastPred: null,
-        lastPeriod: null,
+        activePeriod: null,
+        placedPeriod: null,
+        lastTradedPeriod: null,
+        lastTradedPred: null,
+        evaluatedPeriod: null,
         circuitBreakerTriggered: false,
         w: 0,
         l: 0,
         cur_w_streak: 0,
         cur_l_streak: 0,
         max_w_streak: 0,
-        max_l_streak: 0
+        max_l_streak: 0,
+        _trdLockTs: 0
     };
     window.__WINGO_ST = st;
 
@@ -762,19 +783,23 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         return st.curBal || 0;
     }
 
-    // WinGo 30s Countdown Inspector to bypass betting in the 5-second freeze
+    // WinGo 30s Countdown Inspector to bypass betting in the 4-second freeze
     function getRemainingSeconds() {
         try {
-            let timeEl = document.querySelector('.time-box, [class*="time" i], .Time');
-            if (timeEl) {
-                let txt = timeEl.innerText || '';
-                let m = txt.match(/(\d+)\s*:\s*(\d+)/);
+            let timeEls = document.querySelectorAll('.time-box, .Time, [class*="time" i], [class*="clock" i], [class*="countdown" i], .van-count-down');
+            for (let el of timeEls) {
+                let txt = (el.innerText || '').trim();
+                let m = txt.match(/(\d+)\s*[:：]\s*(\d+)/);
                 if (m) {
-                    return (parseInt(m[1]) * 60) + parseInt(m[2]);
+                    return (parseInt(m[1], 10) * 60) + parseInt(m[2], 10);
+                }
+                if (/^\d{1,2}$/.test(txt)) {
+                    let s = parseInt(txt, 10);
+                    if (s >= 0 && s <= 60) return s;
                 }
             }
         } catch(e){}
-        return 30;
+        return 30; // Default safe: allow trade if timer class is custom
     }
 
     const calcSeq = (cBal, nSteps) => {
@@ -796,18 +821,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         return seq;
     };
 
-    const getNextLivePeriod = (str) => {
-        let chars = String(str).split('');
-        for (let i = chars.length - 1; i >= 0; i--) {
-            if (chars[i] !== '9') {
-                chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
-                return chars.join('');
-            }
-            chars[i] = '0';
-        }
-        return '1' + chars.join('');
-    };
-
     const drx_triggerEvent = (el, etype) => {
         let ev = new Event(etype, { bubbles: true, cancelable: true });
         el.dispatchEvent(ev);
@@ -825,60 +838,79 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         }
     };
 
-    // Robust, non-skipping trade executor:
-    // Identifies buttons, handles Vant UI slide-up animation, inputs amount, clicks confirm
+    // Ultra-Fast Trade Executor with auto-timeout and full Vant UI modal interaction
     const exeTrd = (pred, amt, cb) => {
+        let finished = false;
+        const done = (status) => {
+            if (!finished) {
+                finished = true;
+                if (cb) cb(status);
+            }
+        };
+
+        // Fail-safe 3.0s timeout to never hang
+        setTimeout(() => done(false), 3000);
+
         try {
-            // Guard: Never place bet during locked last 5 seconds of round
+            // Guard: Never place bet during the locked last 4 seconds of WinGo round
             let remSec = getRemainingSeconds();
-            if (remSec <= 5 && remSec > 0) {
-                if (cb) cb(false);
-                return;
+            if (remSec <= 4 && remSec >= 0) {
+                return done(false);
             }
 
-            // Dismiss any lingering overlay first so buttons are 100% clickable
-            let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
-            if (lingeringDialog) {
-                let cBtn = lingeringDialog.querySelector('.van-dialog__confirm, button');
+            // Dismiss lingering overlays, announcements, or winning toasts
+            let lingerings = document.querySelectorAll('.van-dialog, .announcement-box, .bonus-dialog, .winning-tip, [class*="notice" i] [class*="close" i], .van-popup--center');
+            for (let l of lingerings) {
+                let cBtn = l.querySelector('.van-dialog__confirm, .van-icon-cross, button, .close-btn');
                 if (cBtn) try { cBtn.click(); } catch(e){}
-                try { lingeringDialog.remove(); } catch(e){}
             }
+
+            let targetText = String(pred).toLowerCase().trim();
+            if (targetText.includes('smok') || targetText === 's') targetText = 'small';
+            if (targetText === 'b') targetText = 'big';
 
             let btn = null;
-            let targetText = String(pred).toLowerCase().trim();
-            let btns = document.querySelectorAll('button, div, span');
-            for (let i = 0; i < btns.length; i++) {
-                let t = (btns[i].innerText || '').trim().toLowerCase();
-                if (t === targetText && btns[i].offsetParent && !btns[i].children.length) {
-                    btn = btns[i];
-                    break;
+            if (targetText === 'big') {
+                btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i], div[class*="big" i], span[class*="big" i]');
+            } else if (targetText === 'small') {
+                btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i], div[class*="small" i], span[class*="small" i]');
+            } else if (targetText === 'green') {
+                btn = document.querySelector('button[class*="green"], div[class*="green"], span[class*="green"]');
+            } else if (targetText === 'red') {
+                btn = document.querySelector('button[class*="red"], div[class*="red"], span[class*="red"]');
+            } else if (targetText === 'violet') {
+                btn = document.querySelector('button[class*="violet"], div[class*="violet"], span[class*="violet"]');
+            }
+
+            if (!btn) {
+                let candidates = document.querySelectorAll('button, div[role="button"], span');
+                for (let c of candidates) {
+                    let t = (c.innerText || '').trim().toLowerCase();
+                    if ((t === targetText || (targetText === 'small' && (t === 's' || t.includes('small') || t.includes('smok'))) || (targetText === 'big' && (t === 'b' || t.includes('big')))) && c.offsetParent && c.clientHeight > 0) {
+                        btn = c;
+                        break;
+                    }
                 }
             }
+
             if (!btn) {
-                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i], div[class*="big" i]');
-                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i], div[class*="small" i]');
-                else if (targetText === 'green') btn = document.querySelector('button[class*="green"], div[class*="green"]');
-                else if (targetText === 'red') btn = document.querySelector('button[class*="red"], div[class*="red"]');
-                else if (targetText === 'violet') btn = document.querySelector('button[class*="violet"], div[class*="violet"]');
+                return done(false);
             }
-            if (!btn) {
-                if (cb) cb(false);
-                return;
-            }
+
             drx_simClick(btn);
 
-            // Interval-based waiting for Vant UI modal & stepper input to fully mount
+            // Fast polling for Vant UI modal & stepper input to fully mount (every 35ms up to 28 times = 1.0s max)
             let checkAttempts = 0;
             let valInterval = setInterval(() => {
                 checkAttempts++;
-                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric']");
-                if (inpEl || checkAttempts > 18) {
+                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric'], input[type='tel']");
+                if (inpEl || checkAttempts > 28) {
                     clearInterval(valInterval);
                     if (inpEl) {
                         inpEl.focus();
                         let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
                         if (setV) setV.call(inpEl, String(amt));
-                        else inpEl.value = amt;
+                        else inpEl.value = String(amt);
                         drx_triggerEvent(inpEl, 'input');
                         drx_triggerEvent(inpEl, 'change');
                         drx_triggerEvent(inpEl, 'blur');
@@ -889,7 +921,7 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
                             let docButtons = document.querySelectorAll('button, div[role="button"]');
                             for (let b of docButtons) {
                                 let txt = (b.innerText || '').toLowerCase();
-                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
+                                if ((txt.includes('total') || txt.includes('confirm') || txt.includes('bet') || txt.includes('立即下注') || txt.includes('৳') || txt.includes('presale')) && b.offsetParent) {
                                     dEl = b;
                                     break;
                                 }
@@ -899,13 +931,13 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
                             drx_simClick(dEl);
                         }
                         setTimeout(() => {
-                            if (cb) cb(true);
-                        }, 1800);
-                    }, 700);
+                            done(true);
+                        }, 350);
+                    }, 100);
                 }
-            }, 180);
+            }, 35);
         } catch(e) {
-            if (cb) cb(false);
+            done(false);
         }
     };
 
@@ -920,11 +952,13 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
 
     let isFetchingApi = false;
 
-    // 24/7 API Polling & Real-time Trade Dispatch Loop (Runs every 1000ms)
+    // 24/7 Real-Time API Poller & Consecutive Zero-Skip Dispatch Loop (Runs every 1000ms)
     const apiLoopTask = async () => {
-        if (!st.isRun || st.isTrd || isFetchingApi) return;
-        isFetchingApi = true;
+        if (!st.isRun) return;
+        if (st.isTrd) return; // Wait if currently placing bet on page
+        if (isFetchingApi) return; // Avoid overlapping fetches
 
+        isFetchingApi = true;
         try {
             chkBal();
             if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0) {
@@ -935,138 +969,159 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
                 return;
             }
 
-            let ts = Math.floor(Date.now() / 1000);
+            let ts = Date.now();
             let sep = targetApiUrl.includes('?') ? '&' : '?';
-            let fetchUrl = targetApiUrl + sep + "page=1&ts=" + ts;
-            let dataArray = null;
+            let fetchUrl = targetApiUrl + sep + "page=1&ts=" + ts + "&_rnd=" + Math.random().toString(36).substring(2, 7);
 
+            let controller = new AbortController();
+            let fetchTimeout = setTimeout(() => controller.abort(), 2500);
+
+            let dataObj = null;
             try {
-                let res = await fetch(fetchUrl);
+                let res = await fetch(fetchUrl, {
+                    signal: controller.signal,
+                    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+                });
+                clearTimeout(fetchTimeout);
                 if (res.ok) {
-                    dataArray = await res.json();
+                    dataObj = await res.json();
                 }
             } catch(fetchErr) {
-                // Secondary fallback attempt if primary endpoint has momentary network error
+                clearTimeout(fetchTimeout);
                 try {
                     let fallbackUrl = "https://data-vip-247-hack.ai.studio/apipid.json?page=1&ts=" + ts;
                     let res2 = await fetch(fallbackUrl);
-                    if (res2.ok) dataArray = await res2.json();
+                    if (res2.ok) dataObj = await res2.json();
                 } catch(e2){}
             }
 
-            if (dataArray) {
-                let activeLogic = Array.isArray(dataArray) ? dataArray[0] : (dataArray.data ? dataArray.data[0] : dataArray);
+            if (dataObj) {
+                let activeLogic = Array.isArray(dataObj) ? dataObj[0] : (dataObj.data ? dataObj.data[0] : dataObj);
                 if (activeLogic) {
-                    let tempHist = activeLogic.history || (activeLogic.data && activeLogic.data.history) || [];
-                    let cSig = '';
-                    if (tempHist[0] && (tempHist[0].pid || tempHist[0].period)) {
-                        cSig = getNextLivePeriod(String(tempHist[0].pid || tempHist[0].period));
-                    }
-                    if (!cSig && activeLogic.next && (activeLogic.next.period || activeLogic.next.pid)) {
-                        cSig = String(activeLogic.next.period || activeLogic.next.pid);
-                    }
-                    if (!cSig && activeLogic.period) {
-                        cSig = String(activeLogic.period);
-                    }
-                    let sSig = sessionStorage.getItem('drx_sig');
-
-                    if (cSig && cSig !== sSig) {
-                        // A. Evaluate Previous Round Result
-                        if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
-                            let actualData = tempHist[0];
-                            let actualR = '';
-                            if (actualData) {
-                                if (actualData.actual_size) {
-                                    actualR = String(actualData.actual_size).toUpperCase().trim();
-                                } else if (actualData.actual === 'BIG' || actualData.actual === 1 || (typeof actualData.actual === 'number' && actualData.actual >= 5)) {
-                                    actualR = 'BIG';
-                                } else if (actualData.actual === 'SMALL' || actualData.actual === 0 || (typeof actualData.actual === 'number' && actualData.actual < 5)) {
-                                    actualR = 'SMALL';
+                    // Extract next incoming period
+                    let targetNext = activeLogic.next || (activeLogic.data && activeLogic.data.next) || activeLogic;
+                    let incomingPeriod = '';
+                    if (targetNext && (targetNext.period || targetNext.pid || targetNext.pld)) {
+                        incomingPeriod = String(targetNext.period || targetNext.pid || targetNext.pld).trim();
+                    } else if (activeLogic.period || activeLogic.pid) {
+                        incomingPeriod = String(activeLogic.period || activeLogic.pid).trim();
+                    } else {
+                        let tempHist = activeLogic.history || (activeLogic.data && activeLogic.data.history) || [];
+                        if (tempHist[0] && (tempHist[0].pid || tempHist[0].period)) {
+                            let chars = String(tempHist[0].pid || tempHist[0].period).split('');
+                            for (let i = chars.length - 1; i >= 0; i--) {
+                                if (chars[i] !== '9') {
+                                    chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
+                                    break;
                                 }
+                                chars[i] = '0';
                             }
-                            let won = false;
-                            if (actualR) {
-                                won = (st.lastPred === actualR);
-                            } else {
-                                let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
-                                if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
-                                    won = true;
-                                }
-                            }
+                            incomingPeriod = chars.join('');
+                        }
+                    }
 
-                            if (won) {
-                                st.w++;
-                                st.cur_w_streak++;
-                                st.cur_l_streak = 0;
-                                if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                    // Extract and normalize prediction (BIG, SMALL / SMOK)
+                    let rawPred = (targetNext && (targetNext.size || targetNext.pred)) || (activeLogic.pred || activeLogic.prediction || activeLogic.size) || 'BIG';
+                    let predText = String(rawPred).toUpperCase().trim();
+                    let prediction = 'BIG';
+                    if (predText.includes('SMOK') || predText.includes('SMALL') || predText === 'S') {
+                        prediction = 'SMALL';
+                    } else if (predText.includes('BIG') || predText === 'B') {
+                        prediction = 'BIG';
+                    } else if (['GREEN', 'RED', 'VIOLET'].includes(predText)) {
+                        prediction = predText;
+                    } else {
+                        prediction = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
+                    }
+
+                    st.activePeriod = incomingPeriod;
+
+                    // A. Evaluate Previous Round Result (Run once when a new period is detected)
+                    if (st.lastTradedPeriod && st.evaluatedPeriod !== incomingPeriod) {
+                        let tempHist = activeLogic.history || (activeLogic.data && activeLogic.data.history) || [];
+                        let finishedItem = tempHist.find(h => String(h.period || h.pid || '') === String(st.lastTradedPeriod)) || tempHist[0];
+                        let actualSize = '';
+                        if (finishedItem) {
+                            if (finishedItem.actual_size) {
+                                actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                            } else if (finishedItem.actual === 'BIG' || finishedItem.actual === 1 || (typeof finishedItem.actual === 'number' && finishedItem.actual >= 5)) {
+                                actualSize = 'BIG';
+                            } else if (finishedItem.actual === 'SMALL' || finishedItem.actual === 0 || (typeof finishedItem.actual === 'number' && finishedItem.actual < 5)) {
+                                actualSize = 'SMALL';
+                            }
+                        }
+
+                        let won = false;
+                        if (actualSize) {
+                            won = (st.lastTradedPred === actualSize);
+                        } else {
+                            let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
+                            if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
+                                won = true;
+                            }
+                        }
+
+                        if (won) {
+                            st.w++;
+                            st.cur_w_streak++;
+                            st.cur_l_streak = 0;
+                            if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                            st.stpIdx = 0; // Win: reset to Step 1
+                        } else {
+                            st.l++;
+                            st.cur_l_streak++;
+                            st.cur_w_streak = 0;
+                            if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+
+                            // Loss: escalate to next step; if max step reached, wrap to Step 1 so 24/7 trading NEVER stops
+                            if (st.stpIdx >= st.steps - 1) {
                                 st.stpIdx = 0;
                             } else {
-                                st.l++;
-                                st.cur_l_streak++;
-                                st.cur_w_streak = 0;
-                                if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-
-                                // Max Step Failure (Circuit Breaker)
-                                if (st.stpIdx >= st.steps - 1) {
-                                    st.circuitBreakerTriggered = true;
-                                    st.isRun = false;
-                                    st.isTrd = false;
-                                    if (st.autoInt) clearInterval(st.autoInt);
-                                    isFetchingApi = false;
-                                    return;
-                                } else {
-                                    st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
-                                }
+                                st.stpIdx = st.stpIdx + 1;
                             }
                         }
+                        st.evaluatedPeriod = incomingPeriod;
+                    }
 
-                        st.lastPred = null;
-                        st.lastPeriod = cSig;
-                        st.isTrd = true;
+                    // B. Consecutive Trade Placement (Zero-Skip Engine)
+                    // If trade has not yet successfully executed for this incoming period, execute immediately!
+                    let sSig = sessionStorage.getItem('drx_sig');
+                    let alreadyPlaced = (st.placedPeriod === incomingPeriod) || (sSig === incomingPeriod);
 
-                        let nBal = chkBal();
-                        if (st.tgtAmt > 0 && nBal >= st.tgtAmt && st.startBal > 0) {
-                            st.isTrd = false;
-                            isFetchingApi = false;
-                            return;
-                        }
-
-                        st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
-                        if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
-                        let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-
-                        if (nBal > 0 && nBal < tAmt) {
-                            st.stpIdx = 0;
-                            st.isTrd = false;
-                            isFetchingApi = false;
-                            return;
-                        }
-
-                        // Allow 1.8s for platform to settle into new round, then dispatch trade
-                        setTimeout(() => {
-                            let rawPred = activeLogic.pred || activeLogic.prediction || (activeLogic.next && (activeLogic.next.size || activeLogic.next.pred)) || 'BIG';
-                            let prediction = String(rawPred).toUpperCase().trim();
-                            if (prediction === 'SKIP') {
-                                st.lastPred = null;
-                                sessionStorage.setItem('drx_sig', cSig);
-                                setTimeout(() => { st.isTrd = false; }, 1000);
-                            } else {
-                                if (!['BIG', 'SMALL'].includes(prediction)) {
-                                    prediction = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
-                                }
-                                st.lastPred = prediction;
-                                exeTrd(prediction, tAmt, (suc) => {
-                                    if (suc) {
-                                        sessionStorage.setItem('drx_sig', cSig);
-                                        sessionStorage.setItem('drx_p_bal', String(st.curBal));
-                                        st.tradesDone++;
-                                    } else {
-                                        st.lastPred = null;
-                                    }
-                                    setTimeout(() => { st.isTrd = false; }, 1000);
-                                });
+                    if (incomingPeriod && !alreadyPlaced) {
+                        let remSec = getRemainingSeconds();
+                        // Only execute if not in the 4-second freeze lock
+                        if (remSec > 4 || remSec < 0) {
+                            let nBal = chkBal();
+                            if (st.tgtAmt > 0 && nBal >= st.tgtAmt && st.startBal > 0) {
+                                st.isRun = false;
+                                st.isTrd = false;
+                                isFetchingApi = false;
+                                return;
                             }
-                        }, 1800);
+
+                            st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
+                            if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
+                            let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+                            if (nBal > 0 && nBal < tAmt) {
+                                st.stpIdx = 0;
+                                tAmt = Math.floor(st.dynSeq[0]) || 1;
+                            }
+
+                            st.isTrd = true;
+                            exeTrd(prediction, tAmt, (suc) => {
+                                if (suc) {
+                                    // Bet confirmed on website: lock period and record balances
+                                    st.placedPeriod = incomingPeriod;
+                                    st.lastTradedPeriod = incomingPeriod;
+                                    st.lastTradedPred = prediction;
+                                    sessionStorage.setItem('drx_sig', incomingPeriod);
+                                    sessionStorage.setItem('drx_p_bal', String(st.curBal));
+                                    st.tradesDone++;
+                                }
+                                st.isTrd = false;
+                            });
+                        }
                     }
                 }
             }
@@ -1076,22 +1131,26 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         isFetchingApi = false;
     };
 
-    // 15-second trade-lock watchdog (prevents st.isTrd from staying stuck)
-    let tradeLockTs = 0;
+    // 8-second trade-lock watchdog (prevents st.isTrd from staying stuck if website lags)
     setInterval(() => {
         if (st.isTrd) {
-            if (!tradeLockTs) tradeLockTs = Date.now();
-            else if (Date.now() - tradeLockTs > 15000) {
+            if (!st._trdLockTs) st._trdLockTs = Date.now();
+            else if (Date.now() - st._trdLockTs > 8000) {
                 st.isTrd = false;
                 isFetchingApi = false;
-                tradeLockTs = 0;
+                st._trdLockTs = 0;
             }
         } else {
-            tradeLockTs = 0;
+            st._trdLockTs = 0;
         }
-    }, 3000);
+    }, 1500);
 
-    st.autoInt = setInterval(apiLoopTask, 1000);
+    // Staggered boot: Start polling after initial stagger offset (0ms to 880ms), then repeat every 1000ms
+    setTimeout(() => {
+        apiLoopTask();
+        st.autoInt = setInterval(apiLoopTask, 1000);
+    }, staggerOffsetMs);
+
     return "GHOST_TRADING_INITIATED_24_7";
 })();
 """
@@ -1440,7 +1499,7 @@ def worker_task_listener():
                     sess["is_trading"] = True
                     sess["target_goal"] = target_goal
                     sess["total_steps"] = total_steps
-                    safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_CORE_JS, target_goal, total_steps, pred_url))
+                    safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_CORE_JS, target_goal, total_steps, pred_url, sid))
 
                     cur_b = sess.get("current_balance", 0.0)
                     sess["start_bal"] = cur_b
