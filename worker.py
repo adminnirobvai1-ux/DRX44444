@@ -93,7 +93,7 @@ def to_subscript_digits(val) -> str:
 # WORKER CONFIGURATION & CLUSTER REGISTRY
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dpjebg2ugq2r.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
 # Support custom terminal numbering (e.g. python3 worker.py 1 -> W-01)
