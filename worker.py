@@ -95,7 +95,20 @@ def to_subscript_digits(val) -> str:
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
-NODE_ID = f"worker_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
+
+# Support custom terminal numbering (e.g. python3 worker.py 1 -> W-01)
+custom_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+if custom_arg:
+    if custom_arg.isdigit():
+        WORKER_ALIAS = f"W-{int(custom_arg):02d}"
+    else:
+        WORKER_ALIAS = custom_arg.upper()
+    NODE_ID = f"worker_{WORKER_ALIAS}_{uuid.uuid4().hex[:4]}"
+else:
+    WORKER_ALIAS = f"W-{uuid.uuid4().hex[:4].upper()}"
+    NODE_ID = f"worker_{WORKER_ALIAS}_{os.getpid()}"
+
+cached_latency = 50.0
 
 PROFILES_BASE_DIR = os.path.expanduser("~/.ff_bot_profiles")
 os.makedirs(PROFILES_BASE_DIR, exist_ok=True)
@@ -757,17 +770,25 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
         return 30;
     }
 
-    // WinGo Current Period Inspector from DOM
-    function getDomCurrentPeriod() {
+    // WinGo Current Period Inspector from DOM with fallback to 30s Epoch Round
+    function getLiveRoundId() {
         try {
-            let periodEl = document.querySelector('.Game__C-title-sub, [class*="period" i], [class*="issue" i]');
-            if (periodEl) {
-                let txt = periodEl.innerText || '';
-                let m = txt.match(/(\d{10,25})/);
+            // 1. Scan for the 15-20 digit live period number on the page
+            let allTextEls = document.querySelectorAll('div, span, p, h3');
+            for (let i = 0; i < allTextEls.length; i++) {
+                let t = (allTextEls[i].innerText || '').trim();
+                if (/^20\d{12,18}$/.test(t) && allTextEls[i].children.length === 0) {
+                    return t;
+                }
+            }
+            let pEl = document.querySelector('.Game__C-title-sub, .Time__C-num, [class*="period" i], [class*="issue" i]');
+            if (pEl) {
+                let m = (pEl.innerText || '').match(/(\d{12,20})/);
                 if (m) return m[1];
             }
         } catch(e){}
-        return null;
+        // Fallback: 30-second epoch clock (guarantees a new distinct round every 30s regardless of DOM)
+        return 'EPOCH_' + Math.floor(Date.now() / 30000);
     }
 
     // STRICT MARTINGALE RATIO MODEL:
@@ -804,6 +825,14 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     // Fast, non-blocking trade execution: completed in <350ms
     const exeTrdFast = (pred, amt, cb) => {
         try {
+            // Dismiss any lingering overlay first so buttons are 100% clickable
+            let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
+            if (lingeringDialog) {
+                let cBtn = lingeringDialog.querySelector('.van-dialog__confirm, button');
+                if (cBtn) try { cBtn.click(); } catch(e){}
+                try { lingeringDialog.remove(); } catch(e){}
+            }
+
             let targetText = String(pred).toLowerCase().trim();
             let btn = null;
             let btns = document.querySelectorAll('button, div, span');
@@ -856,9 +885,17 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
                     if (dEl) {
                         drx_simClick(dEl);
                     }
-                    if (cb) cb(true);
-                }, 180);
-            }, 120);
+
+                    // Clean up modal backdrop after bet placement
+                    setTimeout(() => {
+                        let overlay = document.querySelector('.van-overlay');
+                        if (overlay) {
+                            try { overlay.click(); } catch(e){}
+                        }
+                        if (cb) cb(true);
+                    }, 120);
+                }, 160);
+            }, 100);
         } catch(e) {
             if (cb) cb(false);
         }
@@ -870,154 +907,167 @@ const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376ce
     st.dynSeq = calcSeq(initialBal > 0 ? initialBal : 100, st.steps);
     st.stpIdx = 0;
 
-    let isCycleExecuting = false;
+    let isFetchingApi = false;
 
-    // High frequency execution loop (runs every 600ms)
-    // Ensures immediate trade dispatch on every consecutive 30-second round without skipping!
-    const continuousTradingCycle = async () => {
-        if (!st.isRun || isCycleExecuting) return;
-
-        let liveB = chkBal();
-        if (liveB > 0 && st.startBal <= 0) {
-            st.startBal = liveB;
-        }
-
-        // Target Achievement Check: If current balance reached or exceeded target goal
-        if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0) {
-            st.isRun = false;
-            st.isTrd = false;
-            if (st.autoInt) clearInterval(st.autoInt);
-            return;
-        }
-
-        let remSec = getRemainingSeconds();
-        let domPeriod = getDomCurrentPeriod();
-
-        // Locked zone: last 5 seconds of WinGo 30S round are locked by server
-        if (remSec <= 5 && remSec >= 0) {
-            return;
-        }
-
-        // Fast API query to fetch next prediction
-        let rawJson = null;
-        try {
-            let ts = Math.floor(Date.now() / 1000);
-            let sep = predictionApiUrl.includes('?') ? '&' : '?';
-            let res = await fetch(predictionApiUrl + sep + "page=1&ts=" + ts);
-            if (res.ok) {
-                rawJson = await res.json();
-            }
-        } catch(e) {
-            // Auto-recovery: transient network drop
-        }
-
-        let nextObj = (rawJson && (rawJson.next || (rawJson.data && rawJson.data.next))) || null;
-        let histArray = (rawJson && (rawJson.history || (rawJson.data && rawJson.data.history))) || [];
-
-        let currentPeriod = (nextObj && nextObj.period) ? String(nextObj.period).trim() : domPeriod;
-        if (!currentPeriod) return;
-
-        // If we already placed a bet on this period, wait for the round to complete
-        if (st.lastBetPeriod === currentPeriod) {
-            return;
-        }
-
-        isCycleExecuting = true;
+    // =========================================================================
+    // 1-SECOND REAL-TIME API POLLING & INSTANT TRADE DISPATCH LOOP
+    // Calls API every 1000ms (every second)
+    // Instantly triggers automated bet when new period prediction is received
+    // =========================================================================
+    const apiSecondPollTask = async () => {
+        if (!st.isRun || isFetchingApi) return;
+        isFetchingApi = true;
 
         try {
-            // 1. EVALUATE PREVIOUS ROUND (Martingale Step advancement)
-            if (st.lastPred && st.lastBetPeriod) {
-                let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod)) || histArray[0];
-                let won = false;
-
-                if (finishedItem) {
-                    let actualSize = '';
-                    if (finishedItem.actual_size) {
-                        actualSize = String(finishedItem.actual_size).toUpperCase().trim();
-                    } else if (typeof finishedItem.actual === 'number') {
-                        actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
-                    } else if (finishedItem.actual) {
-                        let actStr = String(finishedItem.actual).toUpperCase().trim();
-                        if (actStr === 'BIG' || actStr === 'SMALL') actualSize = actStr;
-                        else if (!isNaN(parseInt(actStr))) actualSize = parseInt(actStr) >= 5 ? 'BIG' : 'SMALL';
-                    }
-
-                    if (finishedItem.status) {
-                        let statStr = String(finishedItem.status).toUpperCase();
-                        if (statStr === 'WIN') won = true;
-                        else if (statStr === 'LOSS') won = false;
-                        else won = (st.lastPred === actualSize);
-                    } else {
-                        won = (st.lastPred === actualSize);
-                    }
-                } else {
-                    // Fallback to balance delta evaluation
-                    let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
-                    if (prevRecordedBal > 0 && liveB > prevRecordedBal) won = true;
-                }
-
-                if (won) {
-                    st.w++;
-                    st.cur_w_streak++;
-                    st.cur_l_streak = 0;
-                    if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                    // Reset to Step 1 on Win
-                    st.stpIdx = 0;
-                    st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
-                } else {
-                    st.l++;
-                    st.cur_l_streak++;
-                    st.cur_w_streak = 0;
-                    if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-
-                    // Circuit Breaker on max step loss
-                    if (st.stpIdx >= st.steps - 1) {
-                        st.circuitBreakerTriggered = true;
-                        st.isRun = false;
-                        st.isTrd = false;
-                        if (st.autoInt) clearInterval(st.autoInt);
-                        isCycleExecuting = false;
-                        return;
-                    } else {
-                        // Advance consecutively: Step 1 -> Loss -> Step 2
-                        st.stpIdx = st.stpIdx + 1;
-                    }
-                }
+            let liveB = chkBal();
+            if (liveB > 0 && st.startBal <= 0) {
+                st.startBal = liveB;
             }
 
-            // Zero Paisa Rule: Strict floor integer bet amount
-            let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-
-            let rawPred = (nextObj && (nextObj.size || nextObj.pred)) ||
-                          (rawJson && (rawJson.size || rawJson.pred || rawJson.prediction)) ||
-                          'BIG';
-            let prediction = String(rawPred).toUpperCase().trim();
-            if (prediction === 'SKIP') {
-                prediction = (st.stpIdx % 2 === 0) ? 'BIG' : 'SMALL'; // Continuous consecutive betting: NEVER skip!
-            }
-
-            st.isTrd = true;
-            st.lastPred = prediction;
-            st.lastBetPeriod = currentPeriod;
-            sessionStorage.setItem('drx_prev_bal', String(liveB));
-
-            exeTrdFast(prediction, betAmt, (success) => {
-                if (success) {
-                    st.tradesDone++;
-                }
+            // Target Achievement Check: If current balance reached or exceeded target goal
+            if (st.tgtAmt > 0 && st.curBal >= st.tgtAmt && st.startBal > 0) {
+                st.isRun = false;
                 st.isTrd = false;
-                isCycleExecuting = false;
-            });
+                if (st.autoInt) clearInterval(st.autoInt);
+                isFetchingApi = false;
+                return;
+            }
+
+            // 1. Fetch API every second with cache-busting timestamp
+            let fetchUrl = "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json?t=" + Date.now();
+            let rawJson = null;
+            try {
+                let res = await fetch(fetchUrl);
+                if (res.ok) {
+                    rawJson = await res.json();
+                }
+            } catch(fetchErr) {
+                // Transient network glitch - auto recovery on next second
+                isFetchingApi = false;
+                return;
+            }
+
+            if (!rawJson) {
+                isFetchingApi = false;
+                return;
+            }
+
+            let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
+            let histArray = rawJson.history || (rawJson.data && rawJson.data.history) || [];
+
+            // Extract incoming period and prediction size from API
+            let incomingPeriod = (nextObj && nextObj.period) ? String(nextObj.period).trim() : null;
+            let rawPred = (nextObj && (nextObj.size || nextObj.pred)) || rawJson.size || rawJson.pred || 'BIG';
+            let incomingPred = String(rawPred).toUpperCase().trim();
+
+            if (!incomingPeriod) {
+                isFetchingApi = false;
+                return;
+            }
+
+            // 2. CHECK IF NEW PERIOD ARRIVED IN API
+            if (incomingPeriod !== st.lastBetPeriod) {
+                // Guard: Do not place bet in the locked last 4 seconds
+                let remSec = getRemainingSeconds();
+                if (remSec <= 4 && remSec >= 0) {
+                    isFetchingApi = false;
+                    return;
+                }
+
+                // A. EVALUATE PREVIOUS ROUND RESULT (Step Management)
+                if (st.lastPred && st.lastBetPeriod) {
+                    let won = false;
+
+                    // Priority 1: Check balance increase
+                    let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
+                    if (prevRecordedBal > 0 && liveB > prevRecordedBal) {
+                        won = true;
+                    } else {
+                        // Priority 2: Match previous period in API history
+                        let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod)) || histArray[0];
+                        if (finishedItem) {
+                            let actualSize = '';
+                            if (finishedItem.actual_size) {
+                                actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                            } else if (typeof finishedItem.actual === 'number') {
+                                actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
+                            } else if (finishedItem.actual) {
+                                let actStr = String(finishedItem.actual).toUpperCase().trim();
+                                if (actStr === 'BIG' || actStr === 'SMALL') actualSize = actStr;
+                                else if (!isNaN(parseInt(actStr))) actualSize = parseInt(actStr) >= 5 ? 'BIG' : 'SMALL';
+                            }
+
+                            if (finishedItem.status) {
+                                let statStr = String(finishedItem.status).toUpperCase();
+                                if (statStr === 'WIN') won = true;
+                                else if (statStr === 'LOSS') won = false;
+                                else won = (st.lastPred === actualSize);
+                            } else {
+                                won = (st.lastPred === actualSize);
+                            }
+                        }
+                    }
+
+                    if (won) {
+                        st.w++;
+                        st.cur_w_streak++;
+                        st.cur_l_streak = 0;
+                        if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                        // On Win: Reset back to Step 1 (Index 0)
+                        st.stpIdx = 0;
+                        st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
+                    } else {
+                        st.l++;
+                        st.cur_l_streak++;
+                        st.cur_w_streak = 0;
+                        if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+
+                        // Circuit Breaker on max step failure
+                        if (st.stpIdx >= st.steps - 1) {
+                            st.circuitBreakerTriggered = true;
+                            st.isRun = false;
+                            st.isTrd = false;
+                            if (st.autoInt) clearInterval(st.autoInt);
+                            isFetchingApi = false;
+                            return;
+                        } else {
+                            // On Loss: Advance to next step (Step k + 1)
+                            st.stpIdx = st.stpIdx + 1;
+                        }
+                    }
+                }
+
+                // B. CALCULATE BET AMOUNT (Zero Paisa Rule: Strict floor integer)
+                let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+
+                if (!['BIG', 'SMALL'].includes(incomingPred)) {
+                    incomingPred = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
+                }
+
+                // C. SUBMIT BET IMMEDIATELY
+                st.isTrd = true;
+                st.lastPred = incomingPred;
+                st.lastBetPeriod = incomingPeriod;
+                sessionStorage.setItem('drx_prev_bal', String(liveB));
+
+                exeTrdFast(incomingPred, betAmt, (success) => {
+                    if (success) {
+                        st.tradesDone++;
+                    }
+                    st.isTrd = false;
+                });
+            }
 
         } catch(err) {
             st.isTrd = false;
-            isCycleExecuting = false;
         }
+
+        isFetchingApi = false;
     };
 
-    // Fast-cycle polling every 600ms to guarantee zero skipped periods
-    st.autoInt = setInterval(continuousTradingCycle, 600);
-    return "CONTINUOUS_GHOST_TRADING_INITIATED";
+    // Strict 1-second continuous polling: calls API every 1000ms
+    st.autoInt = setInterval(apiSecondPollTask, 1000);
+    return "1_SECOND_API_POLLING_GHOST_TRADING_INITIATED";
 })();
 """
 
@@ -1464,6 +1514,15 @@ def worker_task_listener():
 # ==============================================================================
 # HEARTBEAT & CLUSTER REGISTRATION LOOP
 # ==============================================================================
+def latency_monitor_loop():
+    global cached_latency
+    while WORKER_ACTIVE:
+        try:
+            cached_latency = measure_network_latency(PLATFORMS["site_amarclub"]["login"])
+        except Exception:
+            pass
+        time.sleep(30.0)
+
 def worker_register_node():
     node_payload = {
         "status": "FREE",
@@ -1472,28 +1531,29 @@ def worker_register_node():
         "session_id": None,
         "task": None,
         "node_id": NODE_ID,
+        "alias": WORKER_ALIAS,
         "load": len(active_sessions),
-        "latency_ms": measure_network_latency(PLATFORMS["site_amarclub"]["login"]),
+        "latency_ms": cached_latency,
         "registered_at": time.time()
     }
     firebase_sync_http(f"terminals/{NODE_ID}", "PUT", node_payload)
-    logger.info(f"Node registered in cluster as: {NODE_ID}")
+    logger.info(f"Node registered in cluster as: {NODE_ID} (Alias: {WORKER_ALIAS})")
 
 def worker_heartbeat_loop():
     while WORKER_ACTIVE:
         try:
             status_val = "BUSY" if any(s.get("is_trading") for s in active_sessions.values()) else "FREE"
-            lat = measure_network_latency(PLATFORMS["site_amarclub"]["login"])
             hb_data = {
                 "heartbeat": time.time(),
                 "status": status_val,
                 "load": len(active_sessions),
-                "latency_ms": lat
+                "alias": WORKER_ALIAS,
+                "latency_ms": cached_latency
             }
             firebase_sync_http(f"terminals/{NODE_ID}", "PATCH", hb_data)
         except Exception:
             pass
-        time.sleep(4.0)
+        time.sleep(3.0)
 
 def continuous_24h_watchdog():
     """24/7 Watchdog: Cleans abandoned stale sessions while preserving active trading sessions."""
@@ -1512,9 +1572,13 @@ def continuous_24h_watchdog():
 
 def handle_shutdown_signals(sig, frame):
     global WORKER_ACTIVE
-    logger.info("Shutdown signal caught. Commencing clean cluster teardown...")
+    logger.info(f"Shutdown signal caught on {WORKER_ALIAS}. Commencing clean cluster teardown...")
     WORKER_ACTIVE = False
-    firebase_sync_http(f"terminals/{NODE_ID}", "PATCH", {"status": "OFFLINE", "heartbeat": 0})
+    try:
+        # Immediately delete self from Firebase so no offline ghost is left behind
+        firebase_sync_http(f"terminals/{NODE_ID}", "DELETE")
+    except Exception:
+        pass
     for s in list(active_sessions.keys()):
         terminate_session_cleanly(s)
     cleanup_zombie_browsers()
@@ -1527,8 +1591,9 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_shutdown_signals)
     signal.signal(signal.SIGTERM, handle_shutdown_signals)
 
-    print(f"[*] {to_vip_text('DRX WINGO CLUSTER WORKER ACTIVE')} [{NODE_ID}]...")
+    print(f"[*] {to_vip_text('DRX WINGO CLUSTER WORKER ACTIVE')} [{WORKER_ALIAS} | {NODE_ID}]...")
     worker_register_node()
+    threading.Thread(target=latency_monitor_loop, daemon=True).start()
     threading.Thread(target=worker_heartbeat_loop, daemon=True).start()
     threading.Thread(target=continuous_24h_watchdog, daemon=True).start()
 
