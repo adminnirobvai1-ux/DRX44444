@@ -109,7 +109,7 @@ def format_bdt_target(val) -> str:
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAFsUePPUaxHQMs6ZaiKTV0hazDXD1V3Jc0")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAEjRP2IBUzeOBttHlWbxu1pPhL79mBnvyY")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
@@ -118,7 +118,7 @@ SUPER_ADMIN_ID = int(os.environ.get("SUPER_ADMIN_ID", 8707571669))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@MD_NAYEEM_DRX_TM")
 
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dpjebg2ugq2r.edgeone.dev/apipid.json")
 NODE_ID = f"mgr_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
 SPINNER_FRAMES = ["◴", "◷", "◶", "◵"]
@@ -700,36 +700,64 @@ def handle_pass_command(message):
 # ==============================================================================
 # ADMIN COMMANDS: WORKER FLEET MANAGEMENT (/data & /device)
 # ==============================================================================
-def render_fleet_keyboard(terminals: dict) -> InlineKeyboardMarkup:
+def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, int]:
     markup = InlineKeyboardMarkup(row_width=1)
+    now_ts = time.time()
+
+    active_terminals = {}
     if terminals and isinstance(terminals, dict):
-        now_ts = time.time()
-        for tid, tinfo in terminals.items():
+        for tid, tinfo in list(terminals.items()):
             if isinstance(tinfo, dict):
-                st = tinfo.get("status", "FREE")
                 hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
-                is_alive = (hb_diff <= 20 and st != "OFFLINE")
+                st = tinfo.get("status", "FREE")
 
-                # Short display ID (e.g. GSH7, H06G, IJ8JJ, 620, or last 6 characters)
-                short_id = tid.replace("worker_", "").upper()
-                if len(short_id) > 6:
-                    short_id = short_id[-6:]
+                # Auto-prune stale/dead ghost nodes older than 25 seconds from Firebase
+                if hb_diff > 25 or st == "OFFLINE":
+                    threading.Thread(
+                        target=firebase_sync_http,
+                        args=(f"terminals/{tid}", "DELETE"),
+                        daemon=True
+                    ).start()
+                else:
+                    active_terminals[tid] = tinfo
 
-                status_glyph = "🟢" if (is_alive and st == "BUSY") else ("⚪" if is_alive else "🔴")
-                status_label = "BUSY" if (is_alive and st == "BUSY") else ("IDLE" if is_alive else "OFFLINE")
-
-                btn_text = f"{status_glyph} ⬩➤ 𝐓𝐄𝐑𝐌𝐈𝐍𝐀𝐋: {short_id} [{to_vip_text(status_label)}]"
-                markup.add(InlineKeyboardButton(btn_text, callback_data=f"adm_insp_w:{tid}"))
-
-    # Global Stop / Free All Button
-    markup.add(
-        InlineKeyboardButton(f"✦︎ {to_vip_text('FREE ALL / STOP ALL')} ✦︎", callback_data="adm_free_all")
+    # Sort terminals by alias or ID for clean consistent ordering (W-01, W-02, ...)
+    sorted_items = sorted(
+        active_terminals.items(),
+        key=lambda x: str(x[1].get("alias", x[0]))
     )
-    # Refresh & Back
+
+    for tid, tinfo in sorted_items:
+        st = tinfo.get("status", "FREE")
+        is_busy = (st == "BUSY")
+
+        alias = str(tinfo.get("alias") or tid.replace("worker_", "").upper())
+        if len(alias) > 8 and not tinfo.get("alias"):
+            alias = alias[-6:]
+
+        status_glyph = "🟢" if is_busy else "⚪"
+        status_label = "BUSY" if is_busy else "IDLE"
+
+        btn_text = f"{status_glyph} ⬩➤ 𝐓𝐄𝐑𝐌𝐈𝐍𝐀𝐋: {alias} [{to_vip_text(status_label)}]"
+        markup.add(InlineKeyboardButton(btn_text, callback_data=f"adm_insp_w:{tid}"))
+
+    if not active_terminals:
+        markup.add(
+            InlineKeyboardButton(f"⚠️ {to_vip_text('NO ACTIVE WORKERS ONLINE')}", callback_data="adm_fleet")
+        )
+
+    # Global Emergency Stop & Clean Fleet
+    markup.add(
+        InlineKeyboardButton(f"✦︎ {to_vip_text('FREE ALL / PURGE GHOSTS')} ✦︎", callback_data="adm_free_all")
+    )
+    # Refresh Fleet
     markup.add(
         InlineKeyboardButton(f"֎ {to_vip_text('REFRESH FLEET')} ֎", callback_data="adm_fleet")
     )
-    return markup
+
+    busy_count = sum(1 for t in active_terminals.values() if t.get("status") == "BUSY")
+    idle_count = len(active_terminals) - busy_count
+    return markup, len(active_terminals), busy_count, idle_count
 
 @bot.message_handler(commands=['data', 'device'])
 def handle_fleet_command(message):
@@ -741,17 +769,16 @@ def handle_fleet_command(message):
         return
 
     terms = firebase_sync_http("terminals", "GET") or {}
-    total_workers = len(terms)
-    active_busy = sum(1 for t in terms.values() if isinstance(t, dict) and t.get("status") == "BUSY")
-    free_idle = sum(1 for t in terms.values() if isinstance(t, dict) and t.get("status") in ["FREE", "IDLE"])
+    markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
 
     text = (
         f"<b>﴾ ֎ {to_vip_text('WORKER FLEET MANAGEMENT')} ֎ ﴿</b>\n\n"
-        f"Total Terminals: <b>{to_bold_digits(total_workers)}</b>\n"
+        f"Live Active Terminals: <b>{to_bold_digits(total_active)}</b>\n"
         f"Running / Busy: <b>{to_bold_digits(active_busy)}</b> | Idle / Free: <b>{to_bold_digits(free_idle)}</b>\n\n"
-        f"Select a worker below to inspect live status or trigger individual <b>OFF / STOP</b>:"
+        f"<i>All dead ghost nodes have been automatically pruned from Firebase.</i>\n\n"
+        f"Select an active terminal below to inspect live session or click <b>OFF / STOP</b>:"
     )
-    bot.send_message(chat_id, text, reply_markup=render_fleet_keyboard(terms))
+    bot.send_message(chat_id, text, reply_markup=markup)
 
 @bot.message_handler(commands=['admin'])
 def handle_admin_command(message):
@@ -854,20 +881,19 @@ def handle_callbacks(call):
     elif action == "adm_fleet":
         if chat_id != SUPER_ADMIN_ID: return
         terms = firebase_sync_http("terminals", "GET") or {}
-        total_workers = len(terms)
-        active_busy = sum(1 for t in terms.values() if isinstance(t, dict) and t.get("status") == "BUSY")
-        free_idle = sum(1 for t in terms.values() if isinstance(t, dict) and t.get("status") in ["FREE", "IDLE"])
+        markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
 
         text = (
             f"<b>﴾ ֎ {to_vip_text('WORKER FLEET MANAGEMENT')} ֎ ﴿</b>\n\n"
-            f"Total Terminals: <b>{to_bold_digits(total_workers)}</b>\n"
+            f"Live Active Terminals: <b>{to_bold_digits(total_active)}</b>\n"
             f"Running / Busy: <b>{to_bold_digits(active_busy)}</b> | Idle / Free: <b>{to_bold_digits(free_idle)}</b>\n\n"
-            f"Select a worker below to inspect live status or trigger individual <b>OFF / STOP</b>:"
+            f"<i>All dead ghost nodes have been automatically pruned from Firebase.</i>\n\n"
+            f"Select an active terminal below to inspect live session or click <b>OFF / STOP</b>:"
         )
         try:
-            bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, reply_markup=render_fleet_keyboard(terms))
+            bot.edit_message_text(text, chat_id=chat_id, message_id=call.message.message_id, reply_markup=markup)
         except Exception:
-            bot.send_message(chat_id, text, reply_markup=render_fleet_keyboard(terms))
+            bot.send_message(chat_id, text, reply_markup=markup)
         bot.answer_callback_query(call.id, "Fleet updated")
         return
 
@@ -879,7 +905,7 @@ def handle_callbacks(call):
 
         hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
         status_raw = tinfo.get("status", "UNKNOWN")
-        is_alive = (hb_diff <= 20 and status_raw != "OFFLINE")
+        is_alive = (hb_diff <= 25 and status_raw != "OFFLINE")
 
         # Query session details
         assigned_user = tinfo.get("assigned_user_id", "None")
@@ -910,9 +936,11 @@ def handle_callbacks(call):
         u_hrs, u_rem = divmod(uptime_sec, 3600)
         u_mins, u_secs = divmod(u_rem, 60)
 
+        alias_disp = tinfo.get("alias") or target_tid
+
         inspector_card = (
             f"<b>﴾ ֎ {to_vip_text('WORKER TERMINAL INSPECTOR')} ֎ ﴿</b>\n\n"
-            f"Terminal ID: <code>{target_tid}</code>\n"
+            f"Terminal: <code>{alias_disp}</code> ({target_tid})\n"
             f"Status: <b>{to_vip_text(status_raw)}</b> ({'ONLINE' if is_alive else 'OFFLINE'} | HB: {hb_diff}s ago)\n"
             f"Platform: <b>{platform}</b>\n"
             f"Active Account: <code>{masked_ph}</code>\n"
@@ -943,51 +971,52 @@ def handle_callbacks(call):
             "kind": "EMERGENCY_STOP",
             "worker_id": target_tid
         })
-        # Reset Firebase state immediately
-        firebase_sync_http(f"terminals/{target_tid}", "PATCH", {
-            "status": "FREE",
-            "assigned_user_id": None,
-            "session_id": None,
-            "task": None,
-            "load": 0
-        })
+        # Delete or reset in Firebase
+        firebase_sync_http(f"terminals/{target_tid}", "DELETE")
 
         bot.answer_callback_query(call.id, f"Worker {target_tid} stopped and slot freed!", show_alert=True)
         # Return to fleet overview
         terms = firebase_sync_http("terminals", "GET") or {}
+        markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
         bot.edit_message_text(
             f"<b>﴾ ֎ {to_vip_text('WORKER FREED SUCCESSFULLY')} ֎ ﴿</b>\n\nTerminal <code>{target_tid}</code> terminated and returned to idle pool.",
             chat_id=chat_id,
             message_id=call.message.message_id,
-            reply_markup=render_fleet_keyboard(terms)
+            reply_markup=markup
         )
         return
 
     elif action == "adm_free_all":
         if chat_id != SUPER_ADMIN_ID: return
         terms = firebase_sync_http("terminals", "GET") or {}
-        for tid in terms.keys():
+        now_ts = time.time()
+        for tid, tinfo in terms.items():
             relay_action_to_worker(tid, {
                 "kind": "EMERGENCY_STOP_ALL",
                 "worker_id": tid
             })
-            firebase_sync_http(f"terminals/{tid}", "PATCH", {
-                "status": "FREE",
-                "assigned_user_id": None,
-                "session_id": None,
-                "task": None,
-                "load": 0
-            })
+            hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0))) if isinstance(tinfo, dict) else 999
+            if hb_diff > 25:
+                firebase_sync_http(f"terminals/{tid}", "DELETE")
+            else:
+                firebase_sync_http(f"terminals/{tid}", "PATCH", {
+                    "status": "FREE",
+                    "assigned_user_id": None,
+                    "session_id": None,
+                    "task": None,
+                    "load": 0
+                })
         active_sessions.clear()
-        bot.answer_callback_query(call.id, "All cluster workers terminated and freed!", show_alert=True)
+        bot.answer_callback_query(call.id, "All cluster workers freed and offline ghosts purged!", show_alert=True)
 
         terms_updated = firebase_sync_http("terminals", "GET") or {}
+        markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms_updated)
         bot.edit_message_text(
-            f"<b>﴾ ֎ {to_vip_text('ALL WORKERS FREED')} ֎ ﴿</b>\n\n"
-            f"All browser instances force-quit, all sessions logged out, and all cluster terminals reset to IDLE.",
+            f"<b>﴾ ֎ {to_vip_text('ALL WORKERS FREED & PURGED')} ֎ ﴿</b>\n\n"
+            f"All browser instances force-quit, active sessions reset to IDLE, and all stale ghost nodes deleted from Firebase.",
             chat_id=chat_id,
             message_id=call.message.message_id,
-            reply_markup=render_fleet_keyboard(terms_updated)
+            reply_markup=markup
         )
         return
 
