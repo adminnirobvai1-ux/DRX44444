@@ -111,7 +111,7 @@ def format_bdt_target(val) -> str:
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAHqtjhRCdiiG-uEXHUSk790Di3WGBlSSXM")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAEsXhsoVvFQQ9_xrzEvlTJMBK-P3hakrjI")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
@@ -1601,7 +1601,38 @@ def handle_user_text(message):
 if __name__ == "__main__":
     print(f"[*] {to_vip_text('DRX WINGO CLUSTER MANAGER ACTIVE')} [{NODE_ID}]...")
     try:
+        me = bot.get_me()
+        print(f"[✓] Telegram Bot Connected: @{me.username} ({me.first_name})")
+    except telebot.apihelper.ApiTelegramException as te:
+        if te.error_code == 401:
+            print("\n" + "="*70)
+            print("[✖] TELEGRAM ERROR: 401 Unauthorized (ভুল অথবা বাতিল বট টোকেন!)")
+            print("="*70)
+            print("সমস্যা: আপনার Telegram Bot Token-টি অকার্যকর বা @BotFather থেকে Revoke করা হয়েছে।")
+            print(f"বর্তমান টোকেন: {TOKEN}")
+            print("\nসমাধান:")
+            print("1. Telegram-এ @BotFather এ যান এবং /mybots বা /token কমান্ড দিয়ে নতুন Token নিন।")
+            print("2. manager.py ফাইলের 114 নম্বর লাইনে TOKEN পরিবর্তন করুন:")
+            print('   TOKEN = os.environ.get("BOT_TOKEN", "YOUR_NEW_BOT_TOKEN")')
+            print("3. অথবা টার্মিনালে রান করুন:")
+            print('   export BOT_TOKEN="YOUR_NEW_BOT_TOKEN"')
+            print("   python3 manager.py")
+            print("="*70 + "\n")
+            sys.exit(1)
+        else:
+            logger.warning(f"Telegram connection check warning: {te}")
+    except Exception as e:
+        logger.warning(f"Telegram connection check error: {e}")
+
+    try:
         bot.remove_webhook()
     except Exception:
         pass
-    bot.infinity_polling(skip_pending=True)
+
+    try:
+        bot.infinity_polling(skip_pending=True)
+    except telebot.apihelper.ApiTelegramException as te:
+        if te.error_code == 401:
+            print("\n[✖] 401 Unauthorized: Telegram Bot Token invalid. Check @BotFather.\n")
+            sys.exit(1)
+        raise
