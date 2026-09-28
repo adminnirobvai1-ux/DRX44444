@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 # ==============================================================================
 # DRX WINGO CLUSTER - CENTRAL MANAGER NODE (ম্যানেজার কোড)
 # ==============================================================================
@@ -23,6 +24,7 @@ import urllib.request
 import urllib.error
 import uuid
 import logging
+from typing import Tuple, Dict, Any, Optional, List
 
 # ==============================================================================
 # AUTOMATIC DEPENDENCY BOOTSTRAP
@@ -700,7 +702,7 @@ def handle_pass_command(message):
 # ==============================================================================
 # ADMIN COMMANDS: WORKER FLEET MANAGEMENT (/data & /device)
 # ==============================================================================
-def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, int]:
+def render_fleet_keyboard(terminals: dict) -> Tuple[InlineKeyboardMarkup, int, int]:
     markup = InlineKeyboardMarkup(row_width=1)
     now_ts = time.time()
 
