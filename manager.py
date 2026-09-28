@@ -273,8 +273,11 @@ def get_credentials_keyboard(sid):
     return markup
 
 def get_cancel_only_keyboard(sid):
-    markup = InlineKeyboardMarkup(row_width=1)
-    markup.add(InlineKeyboardButton(f"✖ {to_vip_text('CANCEL')}", callback_data=f"cancel:{sid}"))
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton(f"⬩➤ {to_vip_text('RETRY / READY')}", callback_data=f"force_ready:{sid}"),
+        InlineKeyboardButton(f"✖ {to_vip_text('CANCEL')}", callback_data=f"cancel:{sid}")
+    )
     return markup
 
 def get_start_screen_keyboard(sid):
@@ -424,11 +427,27 @@ def relay_action_to_worker(worker_id, action_payload):
 # ==============================================================================
 def worker_events_listener():
     """Listens for event responses from Workers (e.g. login results, wingo ready, win target reached)."""
+    type_priority = {
+        "PROGRESS_STAGE": 1,
+        "LOGIN_FAILED": 2,
+        "LOGIN_SUCCESS": 3,
+        "WINGO_READY": 4,
+        "LIVE_TELEMETRY": 5,
+        "BALANCE_RESPONSE": 5,
+        "STATS_RESPONSE": 5,
+        "TARGET_ACHIEVED": 6,
+        "CIRCUIT_BREAKER_TRIGGERED": 6
+    }
     while True:
         try:
             events = firebase_sync_http("manager_events", "GET")
             if events and isinstance(events, dict):
-                for ev_key, ev_data in list(events.items()):
+                # Sort events so PROGRESS_STAGE is processed BEFORE LOGIN_SUCCESS, never after!
+                sorted_events = sorted(
+                    events.items(),
+                    key=lambda item: (type_priority.get(item[1].get("type"), 10), item[1].get("timestamp", 0)) if isinstance(item[1], dict) else (99, 0)
+                )
+                for ev_key, ev_data in sorted_events:
                     if isinstance(ev_data, dict):
                         firebase_sync_http(f"manager_events/{ev_key}", "DELETE")
                         ev_type = ev_data.get("type")
@@ -437,6 +456,10 @@ def worker_events_listener():
                         sess = active_sessions.get(sid, {})
 
                         if ev_type == "PROGRESS_STAGE":
+                            # CRITICAL GUARD: Never allow a progress update to overwrite the START screen, target screen, or active trading!
+                            if sess.get("state") in ["LOGIN_SUCCESS", "PREPARING_WINGO", "WINGO_READY", "TRADING"]:
+                                continue
+
                             pct = int(ev_data.get("percent", 20))
                             text_stage = ev_data.get("text", "Processing...")
                             site_name = ev_data.get("site_name", sess.get("site_name", "Amar Club"))
@@ -462,6 +485,7 @@ def worker_events_listener():
                                     pass
 
                         elif ev_type == "LOGIN_SUCCESS":
+                            sess["state"] = "LOGIN_SUCCESS"
                             phone = ev_data.get("phone", "")
                             site_name = ev_data.get("site_name", "")
                             masked_phone = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
@@ -503,6 +527,7 @@ def worker_events_listener():
                                 bot.send_message(chat_id, fail_caption)
 
                         elif ev_type == "WINGO_READY":
+                            sess["state"] = "WINGO_READY"
                             site_name = ev_data.get("site_name", "")
                             live_bal = float(ev_data.get("live_balance", 0.0))
                             sess["current_balance"] = live_bal
@@ -1122,6 +1147,7 @@ def handle_callbacks(call):
 
     elif action == "start_cfg" and sid in active_sessions:
         sess = active_sessions[sid]
+        sess["state"] = "PREPARING_WINGO"
         sess["last_dashboard_msg_id"] = call.message.message_id
         bot.answer_callback_query(call.id, "Preparing WinGo 30S market...")
 
@@ -1149,6 +1175,45 @@ def handle_callbacks(call):
                 "session_id": sid,
                 "chat_id": chat_id
             })
+
+        # Anti-freeze Watchdog: if WINGO_READY is delayed beyond 5 seconds, auto-render parameters!
+        def _watchdog_prepare(target_sid, target_chat, target_msg):
+            time.sleep(5.0)
+            target_sess = active_sessions.get(target_sid)
+            if target_sess and target_sess.get("state") == "PREPARING_WINGO":
+                target_sess["state"] = "WINGO_READY"
+                site = target_sess.get("site_name", "")
+                bal = target_sess.get("current_balance", 0.0)
+                caption = (
+                    f"<b>﴾ ֎ {to_vip_text('WINGO 30S MARKET ACTIVE')} ֎ ﴿</b>\n\n"
+                    f"Platform: <b>{site}</b>\n"
+                    f"Live Balance: <code>{format_bdt_balance(bal)}</code>\n\n"
+                    f"Set your <b>{to_vip_text('TARGET')}</b> and <b>{to_vip_text('STEPS')}</b> below, then press <b>{to_vip_text('START AUTO')}</b>:"
+                )
+                try:
+                    bot.edit_message_text(caption, chat_id=target_chat, message_id=target_msg, reply_markup=get_setup_param_keyboard(target_sid))
+                except Exception:
+                    pass
+
+        threading.Thread(target=_watchdog_prepare, args=(sid, chat_id, call.message.message_id), daemon=True).start()
+
+    elif action == "force_ready" and sid in active_sessions:
+        sess = active_sessions[sid]
+        sess["state"] = "WINGO_READY"
+        site = sess.get("site_name", "")
+        bal = sess.get("current_balance", 0.0)
+        bot.answer_callback_query(call.id, "Market parameters ready!")
+        caption = (
+            f"<b>﴾ ֎ {to_vip_text('WINGO 30S MARKET ACTIVE')} ֎ ﴿</b>\n\n"
+            f"Platform: <b>{site}</b>\n"
+            f"Live Balance: <code>{format_bdt_balance(bal)}</code>\n\n"
+            f"Set your <b>{to_vip_text('TARGET')}</b> and <b>{to_vip_text('STEPS')}</b> below, then press <b>{to_vip_text('START AUTO')}</b>:"
+        )
+        try:
+            bot.edit_message_text(caption, chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_setup_param_keyboard(sid))
+        except Exception:
+            m = bot.send_message(chat_id, caption, reply_markup=get_setup_param_keyboard(sid))
+            sess["last_dashboard_msg_id"] = m.message_id
 
     elif action == "set_tgt" and sid in active_sessions:
         active_sessions[sid]["input_mode"] = "WAITING_TARGET"
