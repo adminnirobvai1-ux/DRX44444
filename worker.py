@@ -1,5 +1,5 @@
 # ==============================================================================
-# DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড - ফুল এক্সপ্যান্ডেড)
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (সম্পূর্ণ সমন্বিত ও ফিক্সড কোড)
 # ==============================================================================
 # Responsibilities:
 # - Connects to Firebase RTDB and registers as an active worker terminal
@@ -7,8 +7,8 @@
 # - Generates local standalone prediction & timer HTML bridge on device
 # - Embeds on-screen live countdown & prediction HUD widget into target DOM
 # - Continuous 30-Second synchronized epoch timer with zero-second dispatch
-# - Multi-Engine Server Prediction Resolution (Fixed variable scope, Zero-skip mode)
-# - Exact Step-Maker Martingale Mathematics (HTML logic mirror: 2^N - 1 scaling)
+# - Exact Step-Maker Martingale Mathematics (JavaScript 2^N - 1 Scaling Integration)
+# - Anti-Double Trade Guard (Strict Single Trade per Period Lock)
 # - Dual-layer execution: Browser JavaScript + Python CORS-Free Engine
 # - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
 # - Guaranteed target balance fulfillment & immediate browser release
@@ -462,7 +462,6 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # 0.5GB Low Memory Tuning
     options.set_preference("dom.ipc.processCount", 1)
     options.set_preference("browser.sessionhistory.max_entries", 2)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
@@ -811,7 +810,7 @@ const autoTotalSteps = parseInt(arguments[1]) || 5;
 const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
-    // On-screen floating prediction & live HUD
+    // Floating on-screen live prediction HUD
     let hud = document.getElementById('drx-prediction-hud');
     if (!hud) {
         hud = document.createElement('div');
@@ -861,10 +860,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         dynSeq: [],
         tradesDone: 0,
         lastPred: null,
-        lastPeriod: null,
         lastBetPeriod: null,
         lastBetAmt: 0,
-        balanceBeforeBet: 0.0,
+        preBetBalance: 0.0,
+        evaluatedPeriod: null,
         lastTriggeredCycle: null,
         circuitBreakerTriggered: false,
         w: 0,
@@ -951,22 +950,31 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         return 'EPOCH_' + Math.floor(Date.now() / 30000);
     }
 
-    // HTML STEP-MAKER FORMULA MIRROR
-    const calcSeq = (cBal, nSteps) => {
-        let balance = parseFloat(cBal) || 100;
-        let stepsCount = parseInt(nSteps) || 5;
+    // =========================================================================
+    // EXACT JAVASCRIPT STEP-MAKER FORMULA MIRROR
+    // =========================================================================
+    const calcSeq = (balanceVal, stepsCountVal) => {
+        let balance = parseFloat(balanceVal) || 100;
+        let stepsCount = parseInt(stepsCountVal) || 5;
         if (stepsCount < 1) stepsCount = 1;
-        let sumPowers = Math.pow(2, stepsCount) - 1;
-        let firstStep = balance / sumPowers;
+
+        // Martingale (2x গুণিতক) ফর্মুলা অনুযায়ী হিসাব:
+        // মোট যোগফল = firstStep * (2^stepsCount - 1)
+        const sumPowers = Math.pow(2, stepsCount) - 1;
+        const firstStep = balance / sumPowers;
+
         let steps = [];
         let total = 0;
+
         for (let i = 0; i < stepsCount; i++) {
             let step = firstStep * Math.pow(2, i);
             let roundedStep = Math.max(1, Math.round(step));
             steps.push(roundedStep);
             total += roundedStep;
         }
-        let roundingError = Math.round(balance - total);
+
+        // শেষ ধাপে সমন্বয় (Adjustment)
+        const roundingError = Math.round(balance - total);
         if (roundingError !== 0 && steps.length > 0) {
             steps[stepsCount - 1] = Math.max(1, steps[stepsCount - 1] + roundingError);
         }
@@ -1030,7 +1038,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             else if (ts.pred === 'SMALL') smallCount++;
         });
 
-        // Zero-skip continuous resolution logic
         let finalPred = 'BIG';
         if (tiedCount === 1) finalPred = topServers[0].pred;
         else if (tiedCount === 2) {
@@ -1140,6 +1147,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         executeCycleTradeWorkflow(forcedPred);
     };
 
+    // Initial sequence setup based on real account balance
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
@@ -1150,13 +1158,24 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     const executeCycleTradeWorkflow = async (overridePred = null) => {
         if (isTargetAchieved() || isFetchingApi || st.isTrd) return;
+
+        let liveB = chkBal();
+        if (liveB > 0 && st.startBal <= 0) {
+            st.startBal = liveB;
+            st.dynSeq = calcSeq(liveB, st.steps);
+        }
+        if (isTargetAchieved()) return;
+
+        let incomingPeriod = getLiveRoundId();
+
+        // STRICT ANTI-DOUBLE BETTING GUARD
+        if (st.lastBetPeriod === incomingPeriod) {
+            return;
+        }
+
         isFetchingApi = true;
 
         try {
-            let liveB = chkBal();
-            if (liveB > 0 && st.startBal <= 0) st.startBal = liveB;
-            if (isTargetAchieved()) { isFetchingApi = false; return; }
-
             let fetchUrl = predictionApiUrl + (predictionApiUrl.includes('?') ? '&' : '?') + "t=" + Date.now();
             let rawJson = null;
             if (!overridePred) {
@@ -1190,18 +1209,19 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 histArray = [rawJson.last_period, ...histArray];
             }
 
-            let incomingPeriod = rawJson.period ? String(rawJson.period).trim() : ((nextObj && nextObj.period) ? String(nextObj.period).trim() : getLiveRoundId());
+            let apiPeriod = rawJson.period ? String(rawJson.period).trim() : ((nextObj && nextObj.period) ? String(nextObj.period).trim() : incomingPeriod);
 
-            // Accurate Martingale outcome verification
-            if (st.lastPred && st.lastBetAmt > 0) {
+            // =================================================================
+            // OUTCOME EVALUATION: RUNS ONLY ACROSS NEW PERIOD TRANSITION
+            // =================================================================
+            if (st.lastBetPeriod && st.lastBetAmt > 0 && st.evaluatedPeriod !== st.lastBetPeriod) {
+                st.evaluatedPeriod = st.lastBetPeriod;
                 let won = false;
-                let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
-                
-                if (prevRecordedBal > 0 && liveB > 0) {
-                    if (liveB > prevRecordedBal) {
+
+                // Pre-bet balance check (Balance before previous bet was placed)
+                if (st.preBetBalance > 0 && liveB > 0) {
+                    if (liveB >= st.preBetBalance) {
                         won = true;
-                    } else if (liveB < prevRecordedBal) {
-                        won = false;
                     } else {
                         let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod));
                         if (finishedItem) {
@@ -1211,9 +1231,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                             else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
 
                             if (finishedItem.status) {
-                                let statStr = String(finishedItem.status).toUpperCase();
-                                won = (statStr === 'WIN');
-                            } else won = (st.lastPred === actualSize);
+                                won = (String(finishedItem.status).toUpperCase() === 'WIN');
+                            } else {
+                                won = (st.lastPred === actualSize);
+                            }
                         } else {
                             won = false;
                         }
@@ -1226,6 +1247,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                     st.cur_l_streak = 0;
                     if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
                     st.stpIdx = 0;
+                    // Win হলে নতুন ব্যালেন্স দিয়ে পুনরায় নতুন স্টেপ সিকোয়েন্স সাজাবে
                     st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
                 } else {
                     st.l++;
@@ -1246,7 +1268,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 }
             }
 
-            if (isTargetAchieved()) { isFetchingApi = false; return; }
+            if (isTargetAchieved()) {
+                isFetchingApi = false;
+                return;
+            }
 
             let outcome = resolvePredictionFromServers(rawJson);
             let incomingPred = overridePred || outcome.pred || 'BIG';
@@ -1257,15 +1282,18 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             if (rEl) rEl.innerText = "WIN RATE: " + outcome.rate + "%";
 
             let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+
+            // Lock Period and Balances before trade execution
             st.isTrd = true;
             st.lastPred = incomingPred;
             st.lastBetPeriod = incomingPeriod;
             st.lastBetAmt = betAmt;
-            st.balanceBeforeBet = liveB;
-            sessionStorage.setItem('drx_prev_bal', String(liveB));
+            st.preBetBalance = liveB;
 
             exeTrdFast(incomingPred, betAmt, (success) => {
-                if (success) st.tradesDone++;
+                if (success) {
+                    st.tradesDone++;
+                }
                 st.isTrd = false;
                 isTargetAchieved();
             });
@@ -1281,7 +1309,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         const rem = updateTimer();
         const currentCycle = Math.floor(Date.now() / 30000);
 
-        // Immediate cycle execution: triggers at cycle shift (rem >= 6 avoids 5s lock)
+        // Immediate cycle execution (Only once per 30-sec cycle and before the 5-sec platform lock)
         if (st.lastTriggeredCycle !== currentCycle && rem >= 6) {
             st.lastTriggeredCycle = currentCycle;
             executeCycleTradeWorkflow();
@@ -1555,7 +1583,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             terminate_session_cleanly(sid)
             break
 
-        # Python Precision Fallback: Runs every cycle at beginning of round to guarantee continuous trading
+        # Fallback Trigger: Strictly guarded against double betting
         now_sec = time.localtime().tm_sec
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
@@ -1655,7 +1683,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 sess["is_trading"] = False
                 break
 
-        # Low-RAM Garbage Collection Cycle
+        # Railway Low-RAM Optimization
         gc.collect()
         time.sleep(1.5)
 
