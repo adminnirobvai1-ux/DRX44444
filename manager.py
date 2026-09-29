@@ -397,6 +397,7 @@ def find_best_worker():
         candidates.sort(key=lambda x: (x[2], x[1]))
         return candidates[0][0]
 
+    # Fallback to any online node
     if all_terminals and isinstance(all_terminals, dict):
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict):
@@ -420,20 +421,55 @@ def relay_action_to_worker(worker_id, action_payload):
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
 # ==============================================================================
 def worker_events_listener():
-    """Listens for event responses from Workers."""
+    """Listens for event responses from Workers (e.g. login results, wingo ready, win target reached)."""
     while True:
         try:
             events = firebase_sync_http("manager_events", "GET")
             if events and isinstance(events, dict):
-                for ev_key, ev_data in list(events.items()):
+                # ক্রমানুসারে (Timestamp order) সাজিয়ে নেওয়া যাতে রেস কন্ডিশনে ১০০% পেজ আটকে না থাকে
+                sorted_events = sorted(
+                    events.items(),
+                    key=lambda item: float(item[1].get("timestamp", 0)) if isinstance(item[1], dict) else 0
+                )
+
+                for ev_key, ev_data in sorted_events:
                     if isinstance(ev_data, dict):
                         firebase_sync_http(f"manager_events/{ev_key}", "DELETE")
                         ev_type = ev_data.get("type")
                         chat_id = ev_data.get("chat_id")
                         sid = ev_data.get("session_id")
+
+                        # যদি মেমোরিতে সেশন মুছে যায়, তবে ফায়ারবেস থেকে রিস্টোর করে নেওয়া
+                        if sid and sid not in active_sessions:
+                            fb_sess = firebase_sync_http(f"sessions/{sid}", "GET")
+                            if fb_sess and isinstance(fb_sess, dict):
+                                active_sessions[sid] = {
+                                    "chat_id": chat_id,
+                                    "session_id": sid,
+                                    "site_name": fb_sess.get("site_name", "Amar Club"),
+                                    "login_url": fb_sess.get("login_url", ""),
+                                    "wingo_url": fb_sess.get("wingo_url", ""),
+                                    "phone": fb_sess.get("phone"),
+                                    "password": fb_sess.get("password"),
+                                    "target_profit": 0,
+                                    "total_steps": 5,
+                                    "is_trading": False,
+                                    "current_balance": 0.0,
+                                    "cur_bal": 0.0,
+                                    "created_at": time.time(),
+                                    "anim_tick": 0,
+                                    "assigned_worker": fb_sess.get("node_id"),
+                                    "last_dashboard_msg_id": ev_data.get("anim_msg_id")
+                                }
+                                user_sessions.setdefault(chat_id, {})["active_sid"] = sid
+
                         sess = active_sessions.get(sid, {})
 
                         if ev_type == "PROGRESS_STAGE":
+                            # লগইন সফল হয়ে গেলে পুরানো ১০০% লোডিং মেসেজ দিয়ে যেন বাটন মুছে না যায়
+                            if sess.get("logged_in"):
+                                continue
+
                             pct = int(ev_data.get("percent", 20))
                             text_stage = ev_data.get("text", "Processing...")
                             site_name = ev_data.get("site_name", sess.get("site_name", "Amar Club"))
@@ -459,30 +495,47 @@ def worker_events_listener():
                                     pass
 
                         elif ev_type == "LOGIN_SUCCESS":
-                            phone = ev_data.get("phone", "")
-                            site_name = ev_data.get("site_name", "")
+                            sess["logged_in"] = True
+                            phone = ev_data.get("phone", "") or sess.get("phone", "")
+                            site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
                             masked_phone = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
+                            terminal_id = ev_data.get('worker_id') or sess.get('assigned_worker', 'ONLINE')
                             caption = (
                                 f"<b>﴾ ֎ {to_vip_text('LOGIN SUCCESSFUL')} ֎ ﴿</b>\n\n"
                                 f"Platform: <b>{site_name}</b>\n"
                                 f"Account: <code>{masked_phone}</code>\n"
-                                f"Terminal: <code>{ev_data.get('worker_id', 'ONLINE')}</code>\n\n"
+                                f"Terminal: <code>{terminal_id}</code>\n\n"
                                 f"Click <b>{to_vip_text('START')}</b> below to configure and run trading parameters:"
                             )
                             target_msg_id = sess.get("last_dashboard_msg_id") or ev_data.get("anim_msg_id")
+                            success_delivered = False
+
                             if target_msg_id:
                                 try:
-                                    bot.edit_message_text(caption, chat_id=chat_id, message_id=target_msg_id, reply_markup=get_start_screen_keyboard(sid))
+                                    bot.edit_message_text(
+                                        caption,
+                                        chat_id=chat_id,
+                                        message_id=target_msg_id,
+                                        reply_markup=get_start_screen_keyboard(sid)
+                                    )
                                     sess["last_dashboard_msg_id"] = target_msg_id
+                                    success_delivered = True
                                 except Exception:
-                                    msg = bot.send_message(chat_id, caption, reply_markup=get_start_screen_keyboard(sid))
+                                    pass
+
+                            if not success_delivered:
+                                try:
+                                    msg = bot.send_message(
+                                        chat_id,
+                                        caption,
+                                        reply_markup=get_start_screen_keyboard(sid)
+                                    )
                                     sess["last_dashboard_msg_id"] = msg.message_id
-                            else:
-                                msg = bot.send_message(chat_id, caption, reply_markup=get_start_screen_keyboard(sid))
-                                sess["last_dashboard_msg_id"] = msg.message_id
+                                except Exception:
+                                    pass
 
                         elif ev_type == "LOGIN_FAILED":
-                            site_name = ev_data.get("site_name", "")
+                            site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
                             err_reason = ev_data.get("reason", "Unknown error")
                             fail_caption = (
                                 f"<b>﴾ ✖ {to_vip_text('LOGIN FAILED')} ✖ ﴿</b>\n\n"
@@ -500,7 +553,7 @@ def worker_events_listener():
                                 bot.send_message(chat_id, fail_caption)
 
                         elif ev_type == "WINGO_READY":
-                            site_name = ev_data.get("site_name", "")
+                            site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
                             live_bal = float(ev_data.get("live_balance", 0.0))
                             sess["current_balance"] = live_bal
                             config_caption = (
@@ -539,7 +592,7 @@ def worker_events_listener():
                             active_sessions.pop(sid, None)
 
                         elif ev_type == "CIRCUIT_BREAKER_TRIGGERED":
-                            site_name = ev_data.get("site_name", "")
+                            site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
                             start_b = float(ev_data.get("start_balance", 0.0))
                             cur_b = float(ev_data.get("final_balance", 0.0))
                             step = ev_data.get("step", 5)
@@ -710,6 +763,7 @@ def render_fleet_keyboard(terminals: dict):
                 hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
                 st = tinfo.get("status", "FREE")
 
+                # Auto-prune stale/dead ghost nodes older than 25 seconds from Firebase
                 if hb_diff > 25 or st == "OFFLINE":
                     threading.Thread(
                         target=firebase_sync_http,
@@ -719,6 +773,7 @@ def render_fleet_keyboard(terminals: dict):
                 else:
                     active_terminals[tid] = tinfo
 
+    # Sort terminals by alias or ID for clean consistent ordering (W-01, W-02, ...)
     sorted_items = sorted(
         active_terminals.items(),
         key=lambda x: str(x[1].get("alias", x[0]))
@@ -743,9 +798,11 @@ def render_fleet_keyboard(terminals: dict):
             InlineKeyboardButton(f"⚠️ {to_vip_text('NO ACTIVE WORKERS ONLINE')}", callback_data="adm_fleet")
         )
 
+    # Global Emergency Stop & Clean Fleet
     markup.add(
         InlineKeyboardButton(f"✦︎ {to_vip_text('FREE ALL / PURGE GHOSTS')} ✦︎", callback_data="adm_free_all")
     )
+    # Refresh Fleet
     markup.add(
         InlineKeyboardButton(f"֎ {to_vip_text('REFRESH FLEET')} ֎", callback_data="adm_fleet")
     )
@@ -902,6 +959,7 @@ def handle_callbacks(call):
         status_raw = tinfo.get("status", "UNKNOWN")
         is_alive = (hb_diff <= 25 and status_raw != "OFFLINE")
 
+        # Query session details
         assigned_user = tinfo.get("assigned_user_id", "None")
         sess_id = tinfo.get("session_id", "None")
 
@@ -913,6 +971,7 @@ def handle_callbacks(call):
         masked_ph = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
         platform = sess_detail.get("site_name", "Amar Club")
 
+        # Fetch live stats for this session
         task_data = {}
         if assigned_user and sess_id and assigned_user != "None":
             task_data = firebase_sync_http(f"user_tasks/{assigned_user}/{sess_id}", "GET") or {}
@@ -959,13 +1018,16 @@ def handle_callbacks(call):
     elif action == "adm_kill_w":
         if chat_id != SUPER_ADMIN_ID: return
         target_tid = sid
+        # Broadcast emergency stop to this specific worker
         relay_action_to_worker(target_tid, {
             "kind": "EMERGENCY_STOP",
             "worker_id": target_tid
         })
+        # Delete or reset in Firebase
         firebase_sync_http(f"terminals/{target_tid}", "DELETE")
 
         bot.answer_callback_query(call.id, f"Worker {target_tid} stopped and slot freed!", show_alert=True)
+        # Return to fleet overview
         terms = firebase_sync_http("terminals", "GET") or {}
         markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
         bot.edit_message_text(
@@ -1174,6 +1236,8 @@ def handle_callbacks(call):
         assigned_worker = sess.get("assigned_worker")
         cur_b = sess.get("current_balance", 0.0)
 
+        # STRICT TARGET RULE:
+        # If user defined target 500, target goal is 500. Do not sum start balance + target.
         target_goal = sess["target_profit"]
         if target_goal <= cur_b:
             target_goal = cur_b + target_goal
@@ -1228,6 +1292,7 @@ def handle_callbacks(call):
     elif action == "bal" and sid in active_sessions:
         sess = active_sessions[sid]
         cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
+        # Instant non-blocking response from active cache so auto-trading NEVER pauses!
         if cur_b and cur_b > 0:
             bot.answer_callback_query(call.id, f"Live Balance: {format_bdt_balance(cur_b)}", show_alert=True)
         else:
@@ -1279,6 +1344,7 @@ def handle_callbacks(call):
             bot.send_message(chat_id, stop_caption)
 
     elif action == "cancel":
+        # Guaranteed instant cancellation
         target_sid = sid or user_sessions.get(chat_id, {}).get("active_sid")
         if target_sid and target_sid in active_sessions:
             assigned_worker = active_sessions[target_sid].get("assigned_worker")
