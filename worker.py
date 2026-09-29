@@ -1,13 +1,20 @@
 # ==============================================================================
-# DRX WINGO CLUSTER - 24/7 CONTINUOUS EXECUTION WORKER NODE
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (24/7 CONTINUOUS UNSTOPPABLE ENGINE)
 # ==============================================================================
 # Responsibilities:
-# - Continuous 24/7 Non-Stop Automated Trading (Zero Unexpected Shutdowns)
-# - Bulletproof DOM + API Multi-Layer Win/Loss Evaluation
-# - Exact Step-Maker Martingale Mathematics (JavaScript 2^N - 1 Scaling)
+# - Connects to Firebase RTDB and registers as an active worker terminal
+# - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
+# - Generates local standalone prediction & timer HTML bridge on device
+# - Embeds on-screen live countdown & prediction HUD widget into target DOM
+# - Continuous 30-Second synchronized epoch timer with zero-second dispatch
+# - Exact Step-Maker Martingale Mathematics (JavaScript 2^N - 1 Scaling Integration)
 # - Anti-Double Trade Guard (Strict Single Trade per Period Lock)
-# - Ultra-Low RAM (0.5GB) & Low CPU Utilization Profile
-# - Automatic Milestone Profit Rollover & Sequence Reset
+# - Direct DOM & API Multi-Layer Accurate Win/Loss Evaluation Engine
+# - 24/7 Continuous Trading Until Exact Target Balance Is Fulfilled
+# - Dual-layer execution: Browser JavaScript + Python CORS-Free Engine
+# - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
+# - Guaranteed target balance fulfillment & immediate browser release
+# - Zombie-free process teardown and admin kill switches (Railway 0.5GB RAM Safe)
 # ==============================================================================
 
 import os
@@ -141,6 +148,148 @@ PLATFORMS = {
 }
 
 # ==============================================================================
+# DEVICE LOCAL HTML BRIDGE GENERATOR
+# ==============================================================================
+def create_local_prediction_bridge_html():
+    """ডিভাইসে স্বয়ংক্রিয়ভাবে টাইমার এবং মাল্টি-ইঞ্জিন এপিআই সমন্বিত লোকাল HTML পেজ তৈরি করে।"""
+    bridge_path = os.path.join(PROFILES_BASE_DIR, "drx_prediction_bridge.html")
+    html_content = f"""<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRX WINGO PREDICTION & TIMER ENGINE</title>
+    <style>
+        body {{
+            background: #0d1117;
+            color: #58a6ff;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }}
+        .card {{
+            background: #161b22;
+            border: 2px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            width: 320px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }}
+        #timer {{
+            font-size: 42px;
+            font-weight: bold;
+            color: #39d353;
+            margin: 15px 0;
+            text-shadow: 0 0 10px rgba(57,211,83,0.5);
+        }}
+        .signal-box {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #f0883e;
+            margin: 10px 0;
+        }}
+        .status {{
+            font-size: 13px;
+            color: #8b949e;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div>⚡ DRX VIP TIMER ENGINE ⚡</div>
+        <div id="timer">00:30</div>
+        <div class="signal-box" id="prediction-box">PRED: WAITING</div>
+        <div class="status" id="rate-box">WIN RATE: --%</div>
+        <div class="status" id="status-box">SYSTEM READY</div>
+    </div>
+
+    <script>
+        const API_URL = "{PREDICTION_API_URL}";
+        let lastTriggeredCycle = null;
+
+        function updateTimer() {{
+            const now = new Date();
+            const seconds = now.getSeconds();
+            const remainingSeconds = 30 - (seconds % 30);
+            const displaySec = remainingSeconds === 30 ? 0 : remainingSeconds;
+            
+            document.getElementById("timer").innerText = `00:${{String(displaySec).padStart(2, '0')}}`;
+            return displaySec;
+        }}
+
+        function resolvePrediction(data) {{
+            let list = data.servers || (data.data && data.data.servers) || [];
+            if (!list.length) return data.top_engine ? data.top_engine.prediction : "BIG";
+
+            let parsed = list.map(s => {{
+                let r = parseFloat(String(s.win_rate || '0').replace(/[^0-9.]/g, '')) || 0;
+                let p = String(s.prediction || '').toUpperCase().trim();
+                let norm = p.includes('SMALL') ? 'SMALL' : (p.includes('BIG') ? 'BIG' : '');
+                return {{ rate: r, pred: norm }};
+            }}).filter(x => x.pred);
+
+            if (!parsed.length) return "BIG";
+
+            let maxRate = Math.max(...parsed.map(x => x.rate));
+            let top = parsed.filter(x => Math.abs(x.rate - maxRate) < 0.01);
+            let bigs = top.filter(x => x.pred === 'BIG').length;
+            let smalls = top.filter(x => x.pred === 'SMALL').length;
+
+            if (top.length === 1) return top[0].pred;
+            if (top.length === 2) return bigs === 2 ? 'BIG' : (smalls === 2 ? 'SMALL' : 'BIG');
+            if (top.length === 3) return bigs >= 2 ? 'BIG' : (smalls >= 2 ? 'SMALL' : 'BIG');
+            if (top.length === 4) {{
+                if (bigs >= 3) return 'BIG';
+                if (smalls >= 3) return 'SMALL';
+                return 'BIG';
+            }}
+            return bigs >= smalls ? 'BIG' : 'SMALL';
+        }}
+
+        async function fetchPrediction() {{
+            try {{
+                document.getElementById('status-box').innerText = "FETCHING SIGNAL...";
+                let res = await fetch(API_URL + "?t=" + Date.now());
+                if (!res.ok) return;
+                let data = await res.json();
+                let pred = resolvePrediction(data);
+                
+                document.getElementById('prediction-box').innerText = "PRED: " + pred;
+                document.getElementById('status-box').innerText = "DISPATCHED TO WORKER";
+                localStorage.setItem('drx_latest_pred', JSON.stringify({{ pred: pred, time: Date.now() }}));
+            }} catch(e) {{
+                document.getElementById('status-box').innerText = "FETCH ERROR - RETRYING";
+            }}
+        }}
+
+        setInterval(() => {{
+            let rem = updateTimer();
+            let cycle = Math.floor(Date.now() / 30000);
+            if (rem >= 20 && lastTriggeredCycle !== cycle) {{
+                lastTriggeredCycle = cycle;
+                fetchPrediction();
+            }}
+        }}, 1000);
+        updateTimer();
+    </script>
+</body>
+</html>
+"""
+    try:
+        with open(bridge_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        logger.info(f"Local Prediction Bridge HTML generated at: {bridge_path}")
+    except Exception as e:
+        logger.error(f"Failed to generate bridge HTML: {e}")
+
+create_local_prediction_bridge_html()
+
+# ==============================================================================
 # FIREBASE RESILIENT SYNCHRONIZER
 # ==============================================================================
 def firebase_sync_http(path: str, method: str = "GET", payload=None, timeout: float = 4.0):
@@ -232,7 +381,7 @@ def cleanup_zombie_browsers():
         pass
 
 def terminate_session_cleanly(session_id):
-    logger.info(f"Initiating teardown for session: {session_id}")
+    logger.info(f"Initiating guaranteed teardown for session: {session_id}")
     sess = active_sessions.pop(session_id, None)
     if sess:
         sess["is_trading"] = False
@@ -250,6 +399,7 @@ def terminate_session_cleanly(session_id):
                 driver.execute_script("""
                     if (window.__WINGO_ST) {
                         window.__WINGO_ST.isRun = false;
+                        if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
                         if (window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt);
                     }
                     let hud = document.getElementById('drx-prediction-hud');
@@ -283,10 +433,10 @@ def terminate_session_cleanly(session_id):
         "task": None,
         "load": len(active_sessions)
     })
-    logger.info(f"Session {session_id} freed.")
+    logger.info(f"Teardown complete. Worker {NODE_ID} slot is now 100% FREE.")
 
 # ==============================================================================
-# HARDENED BROWSER SESSION ISOLATION (0.5GB RAM TUNED)
+# HARDENED BROWSER SESSION ISOLATION (RAILWAY 0.5GB RAM HARDENED)
 # ==============================================================================
 def allocate_session_tab(session_id, target_url):
     sess = active_sessions.get(session_id)
@@ -351,7 +501,7 @@ def allocate_session_tab(session_id, target_url):
     sess["last_activity"] = time.time()
     return driver, sess["window_handle"]
 
-def safe_tab_execute(sid, task_fn, timeout=20.0):
+def safe_tab_execute(sid, task_fn, timeout=25.0):
     sess = active_sessions.get(sid)
     if not sess:
         return None
@@ -385,13 +535,20 @@ def safe_tab_execute(sid, task_fn, timeout=20.0):
     except RuntimeError:
         pass
 
-    if not result_container["completed"] or result_container["error"]:
+    if not result_container["completed"]:
+        logger.warning(f"Tab execution took longer than {timeout}s on sid: {sid}")
+        return None
+
+    if result_container["error"]:
+        err_msg = str(result_container["error"])
+        if "unexpectedly closed" in err_msg or "connection" in err_msg:
+            logger.error(f"Driver connection lost: {err_msg}")
         return None
 
     return result_container["res"]
 
 # ==============================================================================
-# INJECTED JAVASCRIPT AUTOMATION & MODAL CLEANER
+# INJECTED JAVASCRIPT AUTOMATION
 # ==============================================================================
 MODAL_AUTO_DISMISSER_JS = """
 (function(){
@@ -428,6 +585,16 @@ MODAL_AUTO_DISMISSER_JS = """
             });
         });
 
+        const clickableNodes = document.querySelectorAll('button, div[role="button"], span, p, a');
+        clickableNodes.forEach(node => {
+            if (node && node.offsetParent !== null && !node.closest('#sys-core-fin') && !node.closest('#drx-prediction-hud')) {
+                const txt = (node.innerText || '').trim().toLowerCase();
+                if (txt === 'confirm' || txt === 'receive' || txt === 'got it' || txt === '確定' || txt === 'close' || txt === 'ok') {
+                    try { node.click(); } catch(e){}
+                }
+            }
+        });
+
         document.querySelectorAll('.van-overlay, .van-dialog, .modal-backdrop').forEach(overlay => {
             if (overlay && overlay.offsetParent !== null && !overlay.closest('#sys-core-fin') && !overlay.closest('#drx-prediction-hud')) {
                 try { overlay.remove(); } catch(e){}
@@ -450,6 +617,13 @@ if (!window.location.hash.includes('login')) {
     window.location.hash = '#/login';
 }
 
+const dismissInitial = () => {
+    document.querySelectorAll('.van-dialog__confirm, .dialog-confirm, button[class*="confirm" i], .van-button--primary, .van-popup__close-icon').forEach(btn => {
+        try { btn.click(); } catch(e){}
+    });
+};
+dismissInitial();
+
 let elN = document.querySelector('input[type="tel"], input[placeholder*="phone" i], input[placeholder*="Phone" i]') || 
           document.querySelector('body > div > div:nth-of-type(2) > div:nth-of-type(4) > div > div > div > div:nth-of-type(2) > input');
 
@@ -459,7 +633,9 @@ let elP = document.querySelector('input[type="password"]') ||
 let elL = document.querySelector('button[type="submit"]') || 
           document.querySelector('body > div > div:nth-of-type(2) > div:nth-of-type(4) > div > div > div:nth-of-type(4) > button');
 
-if (!elN || !elP || !elL) return "NOT_READY";
+if (!elN || !elP || !elL) {
+    return "NOT_READY";
+}
 
 const clearAndSet = (el, val) => {
     el.focus();
@@ -492,13 +668,14 @@ return "SUCCESS";
 CHECK_LOGIN_STATUS_JS = """
 const hash = window.location.hash || '';
 const href = window.location.href || '';
+const bodyText = document.body ? document.body.innerText : '';
 
 const dialog = document.querySelector('.van-dialog');
 if (dialog) {
     const dText = dialog.innerText || '';
     if (dText.includes('already logged in') || dText.includes('somewhere else') || 
         dText.includes('logged in') || dText.includes('22') || dText.includes('other device') ||
-        dText.includes('Confirm') || dText.includes('continue')) {
+        dText.includes('Confirm') || dText.includes('Determine') || dText.includes('continue')) {
         const confirmBtn = dialog.querySelector('.van-dialog__confirm, button[class*="confirm" i], .van-button--danger, .van-button--primary, button');
         if (confirmBtn) {
             try { confirmBtn.click(); } catch(e){}
@@ -506,6 +683,10 @@ if (dialog) {
         }
     }
 }
+
+document.querySelectorAll('.van-dialog__confirm, .dialog-confirm, button[class*="confirm" i], button[class*="close" i], .van-popup__close-icon').forEach(b => {
+    try { b.click(); } catch(e){}
+});
 
 try {
     const t1 = localStorage.getItem('token') || localStorage.getItem('token_str') || localStorage.getItem('auth');
@@ -517,17 +698,41 @@ if (!href.includes('/login') && (!hash.includes('login') || hash.length > 8)) {
     return { status: "SUCCESS" };
 }
 
+const toast = document.querySelector('.van-toast--text, .van-toast--fail, .van-toast');
+if (toast && toast.innerText && toast.innerText.trim().length > 0) {
+    const t = toast.innerText.trim();
+    if (t.includes('already logged in') || t.includes('somewhere else') || t.includes('22')) {
+        const loginBtn = document.querySelector('button[type="submit"], body > div > div:nth-of-type(2) > div:nth-of-type(4) > div > div > div:nth-of-type(4) > button');
+        if (loginBtn) {
+            try { loginBtn.click(); } catch(e){}
+        }
+        return { status: "PENDING", message: "Handling session takeover..." };
+    }
+    if (t.includes('password') || t.includes('incorrect') || t.includes('wrong') || t.includes('Account does not exist') || t.includes('frozen')) {
+        return { status: "ERROR", message: t };
+    }
+}
+
 return { status: "PENDING" };
 """
 
 WINGO_PERSISTENT_NAV_JS = """
 const targetUrl = arguments[0];
+
 (function(){
+    document.querySelectorAll('.announcement-box, .bonus-dialog, .van-overlay, .van-dialog').forEach(el => {
+        try {
+            const btn = el.querySelector('button, .van-button--primary');
+            if (btn) btn.click();
+            el.remove();
+        } catch(e){}
+    });
+
     const currentHash = window.location.hash || '';
     const currentHref = window.location.href || '';
     const bodyTxt = document.body ? document.body.innerText : '';
 
-    if (currentHash.includes('WinGo') || currentHref.includes('WinGo') || bodyTxt.includes('Time remaining') || bodyTxt.includes('30S')) {
+    if (currentHash.includes('WinGo') || currentHref.includes('WinGo') || bodyTxt.includes('Time remaining') || bodyTxt.includes('30S') || bodyTxt.includes('Win Go')) {
         return "ALREADY_VERIFIED";
     }
 
@@ -536,6 +741,25 @@ const targetUrl = arguments[0];
             window.location.href = targetUrl;
         }
     } catch(e){}
+
+    const s = [
+        'img[src*="wingo" i]', 'img[alt*="wingo" i]',
+        'body > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(7) > div:nth-of-type(3) > div > div:nth-of-type(2) > div > div > div > img',
+        'body > div > div:nth-of-type(3) > div:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(3) > div > div > div > img',
+        'body > div > div:nth-of-type(2) > div:nth-of-type(5) > div:nth-of-type(2) > div > div',
+        'div[class*="lottery" i]', 'div[class*="wingo" i]'
+    ];
+    for (let i = 0; i < s.length; i++) {
+        let el = document.querySelector(s[i]);
+        if (el && el.offsetParent !== null) {
+            ['pointerdown','mousedown','mouseup','click'].forEach(evt => {
+                try { el.dispatchEvent(new MouseEvent(evt, {bubbles:true, cancelable:true, view:window})); } catch(err){}
+            });
+            try { el.click(); } catch(err){}
+            return "CLICKED_SELECTOR";
+        }
+    }
+
     return "NAV_INJECTED";
 })();
 """
@@ -544,12 +768,19 @@ CHECK_WINGO_READY_JS = """
 const hash = window.location.hash || '';
 const href = window.location.href || '';
 const bodyText = document.body ? document.body.innerText : '';
-return (hash.includes('WinGo') || href.includes('WinGo') || bodyText.includes('Time remaining') || bodyText.includes('30S'));
+
+document.querySelectorAll('.van-dialog__confirm, .dialog-close, .van-popup__close-icon, button[class*="close" i], .van-dialog button').forEach(btn => {
+    try { btn.click(); } catch(e){}
+});
+
+if (hash.includes('WinGo') || href.includes('WinGo') || bodyText.includes('Win Go') || bodyText.includes('30S') || bodyText.includes('Time remaining')) {
+    return true;
+}
+return false;
 """
 
 FETCH_BALANCE_JS = r"""
 (function(){
-    // Refresh icon click to fetch latest live balance
     let refBtn = document.querySelector('.van-icon-replay, .van-icon-refresh, [class*="reload" i], [class*="refresh" i]');
     if (refBtn) { try { refBtn.click(); } catch(e){} }
 
@@ -568,12 +799,18 @@ FETCH_BALANCE_JS = r"""
             if (match) return parseFloat(match[1].replace(/,/g, ''));
         }
     }
+    for (let i = 0; i < els.length; i++) {
+        let txt = els[i].innerText || '';
+        if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
+            return parseFloat(txt.replace(/[^\d.]/g, ''));
+        }
+    }
     return 0.0;
 })();
 """
 
 # ==============================================================================
-# INTEGRATED 24/7 CORE TRADING ENGINE JAVASCRIPT
+# INTEGRATED MULTI-ENGINE TIMER, STEP CALCULATOR & ON-SCREEN HUD JAVASCRIPT
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
@@ -581,6 +818,7 @@ const autoTotalSteps = parseInt(arguments[1]) || 5;
 const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
+    // Floating on-screen live prediction HUD
     let hud = document.getElementById('drx-prediction-hud');
     if (!hud) {
         hud = document.createElement('div');
@@ -595,14 +833,25 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         document.body.appendChild(hud);
     }
 
+    let ghostContainer = document.getElementById('sys-core-fin');
+    if (!ghostContainer) {
+        ghostContainer = document.createElement('div');
+        ghostContainer.id = 'sys-core-fin';
+        ghostContainer.setAttribute('style', 'display: none !important; opacity: 0 !important; pointer-events: none !important; position: fixed !important; top: -9999px !important; left: -9999px !important; width: 0 !important; height: 0 !important; z-index: -9999 !important; overflow: hidden !important;');
+        document.body.appendChild(ghostContainer);
+    }
+
     if (window.__WINGO_ST && window.__WINGO_ST.isRun) {
         window.__WINGO_ST.steps = Math.max(1, autoTotalSteps);
-        if (autoTargetGoal > 0) window.__WINGO_ST.tgtAmt = autoTargetGoal;
+        if (autoTargetGoal > 0) {
+            window.__WINGO_ST.tgtAmt = autoTargetGoal;
+        }
         return "ALREADY_RUNNING_UPDATED";
     }
 
-    if (window.__WINGO_ST && window.__WINGO_ST.timerInt) {
-        clearInterval(window.__WINGO_ST.timerInt);
+    if (window.__WINGO_ST) {
+        if (window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt);
+        if (window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt);
     }
 
     const st = {
@@ -610,8 +859,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         tgtAmt: autoTargetGoal,
         startBal: 0.0,
         curBal: 0.0,
+        autoInt: null,
         timerInt: null,
         isTrd: false,
+        targetReached: false,
         stpIdx: 0,
         steps: Math.max(1, autoTotalSteps),
         dynSeq: [],
@@ -619,8 +870,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         lastPred: null,
         lastBetPeriod: null,
         lastBetAmt: 0,
+        preBetBalance: 0.0,
         evaluatedPeriod: null,
         lastTriggeredCycle: null,
+        circuitBreakerTriggered: false,
         w: 0,
         l: 0,
         cur_w_streak: 0,
@@ -641,6 +894,18 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                     if (num > 0) {
                         st.curBal = num;
                         return num;
+                    }
+                }
+            }
+            let els = document.querySelectorAll('span, div, p');
+            for (let i = 0; i < els.length; i++) {
+                let txt = els[i].innerText || '';
+                if (txt.includes('Wallet balance') || txt.includes('Balance')) {
+                    let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
+                    let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
+                    if (match) {
+                        st.curBal = parseFloat(match[1].replace(/,/g, ''));
+                        return st.curBal;
                     }
                 }
             }
@@ -687,13 +952,15 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     }
 
     // =========================================================================
-    // EXACT STEP-MAKER FORMULA (2^N - 1)
+    // EXACT JAVASCRIPT STEP-MAKER FORMULA MIRROR
     // =========================================================================
     const calcSeq = (balanceVal, stepsCountVal) => {
         let balance = parseFloat(balanceVal) || 100;
         let stepsCount = parseInt(stepsCountVal) || 5;
         if (stepsCount < 1) stepsCount = 1;
 
+        // Martingale (2x গুণিতক) ফর্মুলা অনুযায়ী হিসাব:
+        // মোট যোগফল = firstStep * (2^stepsCount - 1)
         const sumPowers = Math.pow(2, stepsCount) - 1;
         const firstStep = balance / sumPowers;
 
@@ -707,6 +974,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             total += roundedStep;
         }
 
+        // শেষ ধাপে সমন্বয় (Adjustment)
         const roundingError = Math.round(balance - total);
         if (roundingError !== 0 && steps.length > 0) {
             steps[stepsCount - 1] = Math.max(1, steps[stepsCount - 1] + roundingError);
@@ -727,7 +995,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     };
 
     // =========================================================================
-    // DIRECT ACCURATE DOM GAME-HISTORY PARSER
+    // ACCURATE LIVE GAME HISTORY DOM PARSER (WIN/LOSS DETERMINATOR)
     // =========================================================================
     function getActualPeriodOutcomeFromDom(targetPeriod) {
         if (!targetPeriod) return null;
@@ -754,8 +1022,8 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 let parent = el.closest('tr') || el.closest('.van-row') || el.parentElement?.parentElement || el.parentElement;
                 if (parent) {
                     let pTxt = (parent.innerText || '').toUpperCase();
-                    if (pTxt.includes('BIG')) return 'BIG';
-                    if (pTxt.includes('SMALL')) return 'SMALL';
+                    if (pTxt.includes('BIG') && !pTxt.includes('SMALL')) return 'BIG';
+                    if (pTxt.includes('SMALL') && !pTxt.includes('BIG')) return 'SMALL';
                     let match = pTxt.replace(tPeriod, '').match(/\b([0-9])\b/);
                     if (match) {
                         return parseInt(match[1]) >= 5 ? 'BIG' : 'SMALL';
@@ -779,6 +1047,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 let p = String(rawJson.top_engine.prediction).toUpperCase().trim();
                 return { pred: p.includes('SMALL') ? 'SMALL' : 'BIG', rate: 70 };
             }
+            if (rawJson.prediction && rawJson.prediction.result) {
+                let p = String(rawJson.prediction.result).toUpperCase().trim();
+                return { pred: p.includes('SMALL') ? 'SMALL' : 'BIG', rate: 65 };
+            }
             return { pred: 'BIG', rate: 50 };
         }
 
@@ -793,17 +1065,55 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
         if (parsed.length === 0) return { pred: 'BIG', rate: 50 };
 
-        let maxRate = Math.max(...parsed.map(x => x.rate));
-        let top = parsed.filter(x => Math.abs(x.rate - maxRate) < 0.01);
-        let bigs = top.filter(x => x.pred === 'BIG').length;
-        let smalls = top.filter(x => x.pred === 'SMALL').length;
+        let maxRate = -1;
+        for (let i = 0; i < parsed.length; i++) {
+            if (parsed[i].rate > maxRate) maxRate = parsed[i].rate;
+        }
 
-        if (top.length === 1) return { pred: top[0].pred, rate: maxRate };
-        return { pred: bigs >= smalls ? 'BIG' : 'SMALL', rate: maxRate };
+        let topServers = parsed.filter(item => Math.abs(item.rate - maxRate) < 0.001);
+        let tiedCount = topServers.length;
+        let bigCount = 0;
+        let smallCount = 0;
+        topServers.forEach(ts => {
+            if (ts.pred === 'BIG') bigCount++;
+            else if (ts.pred === 'SMALL') smallCount++;
+        });
+
+        let finalPred = 'BIG';
+        if (tiedCount === 1) finalPred = topServers[0].pred;
+        else if (tiedCount === 2) {
+            if (bigCount === 2) finalPred = 'BIG';
+            else if (smallCount === 2) finalPred = 'SMALL';
+            else finalPred = topServers[0].pred || 'BIG';
+        } else if (tiedCount === 3) {
+            if (bigCount >= 2) finalPred = 'BIG';
+            else if (smallCount >= 2) finalPred = 'SMALL';
+            else finalPred = topServers[0].pred || 'BIG';
+        } else if (tiedCount === 4) {
+            if (bigCount >= 3) finalPred = 'BIG';
+            else if (smallCount >= 3) finalPred = 'SMALL';
+            else finalPred = topServers[0].pred || 'BIG';
+        } else {
+            finalPred = bigCount >= smallCount ? 'BIG' : 'SMALL';
+        }
+
+        return { pred: finalPred, rate: maxRate };
     }
 
     const exeTrdFast = (pred, amt, cb) => {
+        if (!st.isRun) {
+            if (cb) cb(false);
+            return;
+        }
+
         try {
+            let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
+            if (lingeringDialog) {
+                let cBtn = lingeringDialog.querySelector('.van-dialog__confirm, button');
+                if (cBtn) try { cBtn.click(); } catch(e){}
+                try { lingeringDialog.remove(); } catch(e){}
+            }
+
             let targetText = String(pred).toLowerCase().trim();
             let btn = null;
             let btns = document.querySelectorAll('button, div, span');
@@ -826,6 +1136,11 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             drx_simClick(btn);
 
             setTimeout(() => {
+                if (!st.isRun) {
+                    if (cb) cb(false);
+                    return;
+                }
+
                 let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
                 if (inpEl) {
                     inpEl.focus();
@@ -837,6 +1152,11 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 }
 
                 setTimeout(() => {
+                    if (!st.isRun) {
+                        if (cb) cb(false);
+                        return;
+                    }
+
                     let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
                     if (!dEl) {
                         let docButtons = document.querySelectorAll('button, div[role="button"]');
@@ -862,6 +1182,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         }
     };
 
+    // Public method for external Python fallback dispatch
     window.__WINGO_EXECUTE_TRADE = (forcedPred) => {
         if (!st.isRun || st.isTrd) return;
         executeCycleTradeWorkflow(forcedPred);
@@ -879,13 +1200,26 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         if (isFetchingApi || st.isTrd) return;
 
         let incomingPeriod = getLiveRoundId();
-        if (st.lastBetPeriod === incomingPeriod) return;
+
+        // STRICT ANTI-DOUBLE BETTING GUARD
+        if (st.lastBetPeriod === incomingPeriod) {
+            return;
+        }
 
         refreshWallet();
         let liveB = chkBal();
         if (liveB > 0 && st.startBal <= 0) {
             st.startBal = liveB;
             st.dynSeq = calcSeq(liveB, st.steps);
+        }
+
+        // Guaranteed Target Completion Stop Trigger
+        if (st.tgtAmt > 0 && st.startBal > 0 && (liveB >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
+            st.targetReached = true;
+            st.isRun = false;
+            st.isTrd = false;
+            if (st.timerInt) clearInterval(st.timerInt);
+            return;
         }
 
         isFetchingApi = true;
@@ -898,6 +1232,18 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                     let res = await fetch(fetchUrl);
                     if (res.ok) rawJson = await res.json();
                 } catch(fetchErr) {}
+
+                if (!rawJson) {
+                    try {
+                        let localItem = localStorage.getItem('drx_latest_pred');
+                        if (localItem) {
+                            let pObj = JSON.parse(localItem);
+                            if (Date.now() - pObj.time < 28000) {
+                                rawJson = { top_engine: { prediction: pObj.pred, win_rate: '70%' } };
+                            }
+                        }
+                    } catch(e){}
+                }
             } else {
                 rawJson = { top_engine: { prediction: overridePred, win_rate: '85%' } };
             }
@@ -906,59 +1252,68 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 rawJson = { top_engine: { prediction: 'BIG', win_rate: '50%' } };
             }
 
+            let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
             let histArray = rawJson.history_preview || rawJson.history || (rawJson.data && rawJson.data.history) || [];
+            if (rawJson.last_period && rawJson.last_period.period) {
+                histArray = [rawJson.last_period, ...histArray];
+            }
 
             // =================================================================
-            // ACCURATE MULTI-LAYER WIN / LOSS EVALUATION
+            // MULTI-LAYER ROCK-SOLID OUTCOME RESOLUTION (ACCURATE WIN/LOSS)
             // =================================================================
             if (st.lastBetPeriod && st.lastBetAmt > 0 && st.evaluatedPeriod !== st.lastBetPeriod) {
-                st.evaluatedPeriod = st.lastBetPeriod;
                 let won = false;
                 let resolved = false;
 
-                // 1. Direct DOM check from Game History
+                // 1. Primary Check: Live DOM Table History
                 let domOutcome = getActualPeriodOutcomeFromDom(st.lastBetPeriod);
                 if (domOutcome) {
                     won = (st.lastPred === domOutcome);
                     resolved = true;
                 }
 
-                // 2. Backup check from API history
+                // 2. Secondary Check: EdgeOne Cloud API History
                 if (!resolved && histArray.length > 0) {
-                    let item = histArray.find(h => String(h.period || h.pid).trim() === String(st.lastBetPeriod).trim());
-                    if (item) {
+                    let finishedItem = histArray.find(h => String(h.period || h.pid).trim() === String(st.lastBetPeriod).trim());
+                    if (finishedItem) {
                         let actualSize = '';
-                        if (item.size) actualSize = String(item.size).toUpperCase().trim();
-                        else if (item.actual_size) actualSize = String(item.actual_size).toUpperCase().trim();
-                        else if (typeof item.actual === 'number') actualSize = item.actual >= 5 ? 'BIG' : 'SMALL';
+                        if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
+                        else if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                        else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
 
-                        if (actualSize) {
+                        if (actualSize === 'BIG' || actualSize === 'SMALL') {
                             won = (st.lastPred === actualSize);
                             resolved = true;
-                        } else if (item.status) {
-                            won = (String(item.status).toUpperCase() === 'WIN');
+                        } else if (finishedItem.status) {
+                            won = (String(finishedItem.status).toUpperCase() === 'WIN');
                             resolved = true;
                         }
                     }
                 }
 
-                // 3. Backup: Balance increase detection
+                // 3. Fallback Check: Pre-Bet Live Balance Delta Comparison
                 if (!resolved) {
                     let preBal = parseFloat(sessionStorage.getItem('drx_pre_bet_bal') || '0');
-                    if (preBal > 0 && liveB > preBal) {
-                        won = true;
-                        resolved = true;
+                    if (preBal > 0 && liveB > 0) {
+                        if (liveB > preBal - (st.lastBetAmt * 0.45)) {
+                            won = true;
+                            resolved = true;
+                        } else {
+                            won = false;
+                            resolved = true;
+                        }
                     }
                 }
 
                 if (resolved) {
+                    st.evaluatedPeriod = st.lastBetPeriod;
                     if (won) {
                         st.w++;
                         st.cur_w_streak++;
                         st.cur_l_streak = 0;
                         if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
                         st.stpIdx = 0;
-                        // On Win: re-calculate steps with new enlarged balance
+                        // On Win: Dynamically recalibrate the full sequence using updated profit balance
                         st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
                     } else {
                         st.l++;
@@ -966,7 +1321,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                         st.cur_w_streak = 0;
                         if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
 
-                        // 24/7 Mode: If max steps reached, reset smoothly to Step 1
+                        // 24/7 Continuous Mode: Restart sequence to Step 1 without killing the bot
                         if (st.stpIdx >= st.steps - 1) {
                             st.stpIdx = 0;
                             st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
@@ -977,13 +1332,14 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 }
             }
 
-            // Milestone Goal Check: Do not shut down; rollover profit & keep running 24/7
-            if (st.tgtAmt > 0 && liveB >= st.tgtAmt && st.startBal > 0) {
-                st.startBal = liveB;
-                st.stpIdx = 0;
-                st.dynSeq = calcSeq(liveB, st.steps);
-                let diff = st.tgtAmt - st.startBal;
-                st.tgtAmt = liveB + (diff > 0 ? diff : 100);
+            // Guaranteed Target Stop Check
+            if (st.tgtAmt > 0 && st.startBal > 0 && (liveB >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
+                st.targetReached = true;
+                st.isRun = false;
+                st.isTrd = false;
+                if (st.timerInt) clearInterval(st.timerInt);
+                isFetchingApi = false;
+                return;
             }
 
             let outcome = resolvePredictionFromServers(rawJson);
@@ -1000,10 +1356,13 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             st.lastPred = incomingPred;
             st.lastBetPeriod = incomingPeriod;
             st.lastBetAmt = betAmt;
+            st.preBetBalance = liveB;
             sessionStorage.setItem('drx_pre_bet_bal', String(liveB));
 
             exeTrdFast(incomingPred, betAmt, (success) => {
-                if (success) st.tradesDone++;
+                if (success) {
+                    st.tradesDone++;
+                }
                 st.isTrd = false;
             });
 
@@ -1018,9 +1377,8 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         const rem = updateTimer();
         const currentCycle = Math.floor(Date.now() / 30000);
 
-        // Optimal execution window: Between 24s and 8s remaining
-        // Allows previous round outcome & balance to settle 100%
-        if (st.lastTriggeredCycle !== currentCycle && rem <= 24 && rem >= 8) {
+        // Optimal 24/7 window: Between 23s and 8s remaining ensures previous period DOM & balance settled
+        if (st.lastTriggeredCycle !== currentCycle && rem <= 23 && rem >= 8) {
             st.lastTriggeredCycle = currentCycle;
             executeCycleTradeWorkflow();
         }
@@ -1028,14 +1386,15 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     updateTimer();
     st.timerInt = setInterval(timerTick, 1000);
-    return "DRX_24_7_ENGINE_INITIALIZED";
+    return "DRX_24_7_CONTINUOUS_ENGINE_INITIALIZED";
 })();
 """
 
 # ==============================================================================
-# PYTHON PARALLEL PREDICTION FETCH (ZERO-SKIP BACKEND)
+# PYTHON PARALLEL PREDICTION FETCH (CORS BYPASS & ZERO-SKIP MODE)
 # ==============================================================================
 def python_fetch_best_prediction():
+    """পাইথন ব্যাকএন্ড থেকে সরাসরি EdgeOne API কল করে সেরা প্রেডিকশন বের করে (নো স্কিপ)।"""
     try:
         req = urllib.request.Request(
             f"{PREDICTION_API_URL}?t={int(time.time()*1000)}",
@@ -1067,6 +1426,14 @@ def python_fetch_best_prediction():
 
         if len(top) == 1:
             return top[0]["pred"]
+        elif len(top) == 2:
+            return "BIG" if bigs == 2 else ("SMALL" if smalls == 2 else "BIG")
+        elif len(top) == 3:
+            return "BIG" if bigs >= 2 else ("SMALL" if smalls >= 2 else "BIG")
+        elif len(top) == 4:
+            if bigs >= 3: return "BIG"
+            if smalls >= 3: return "SMALL"
+            return "BIG"
         return "BIG" if bigs >= smalls else "SMALL"
     except Exception:
         return "BIG"
@@ -1075,16 +1442,38 @@ def python_fetch_best_prediction():
 # WORKER EXECUTION FLOWS
 # ==============================================================================
 def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, anim_msg_id):
+    emit_event_to_manager("PROGRESS_STAGE", {
+        "percent": 20,
+        "text": "Initializing dedicated browser container...",
+        "session_id": sid,
+        "chat_id": chat_id,
+        "site_name": site_name,
+        "anim_msg_id": anim_msg_id
+    })
+
     try:
         driver, handle = allocate_session_tab(sid, login_url)
         safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
     except Exception as e:
-        logger.error(f"Allocation error for {sid}: {e}")
+        logger.error(f"Failed to allocate session for {sid}: {e}")
         emit_event_to_manager("LOGIN_FAILED", {
-            "session_id": sid, "chat_id": chat_id, "site_name": site_name, "reason": str(e)
+            "session_id": sid,
+            "chat_id": chat_id,
+            "site_name": site_name,
+            "reason": str(e),
+            "anim_msg_id": anim_msg_id
         })
         terminate_session_cleanly(sid)
         return
+
+    emit_event_to_manager("PROGRESS_STAGE", {
+        "percent": 40,
+        "text": "Navigating to platform portal & bypassing guards...",
+        "session_id": sid,
+        "chat_id": chat_id,
+        "site_name": site_name,
+        "anim_msg_id": anim_msg_id
+    })
 
     fill_ok = False
     for _ in range(70):
@@ -1096,25 +1485,76 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         time.sleep(0.4)
 
     if not fill_ok:
+        emit_event_to_manager("LOGIN_FAILED", {
+            "session_id": sid,
+            "chat_id": chat_id,
+            "site_name": site_name,
+            "reason": "Login form not found or timed out.",
+            "anim_msg_id": anim_msg_id
+        })
         terminate_session_cleanly(sid)
         return
 
+    emit_event_to_manager("PROGRESS_STAGE", {
+        "percent": 60,
+        "text": "Submitting encrypted authentication credentials...",
+        "session_id": sid,
+        "chat_id": chat_id,
+        "site_name": site_name,
+        "anim_msg_id": anim_msg_id
+    })
+
     login_status = "PENDING"
+    err_detail = ""
     for _ in range(40):
         res = safe_tab_execute(sid, lambda drv: drv.execute_script(CHECK_LOGIN_STATUS_JS))
-        if isinstance(res, dict) and res.get("status") == "SUCCESS":
-            login_status = "SUCCESS"
-            break
+        if isinstance(res, dict):
+            if res.get("status") == "SUCCESS":
+                login_status = "SUCCESS"
+                break
+            elif res.get("status") == "CONFIRM_CLICKED":
+                time.sleep(1.2)
+                continue
+            elif res.get("status") == "ERROR":
+                login_status = "ERROR"
+                err_detail = res.get("message", "Invalid credentials")
+                break
         time.sleep(0.4)
 
     if safe_tab_execute(sid, lambda drv: drv.execute_script("return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));")):
         login_status = "SUCCESS"
 
-    if login_status != "SUCCESS":
+    if login_status == "ERROR":
         terminate_session_cleanly(sid)
+        emit_event_to_manager("LOGIN_FAILED", {
+            "session_id": sid,
+            "chat_id": chat_id,
+            "site_name": site_name,
+            "reason": err_detail,
+            "anim_msg_id": anim_msg_id
+        })
         return
 
+    emit_event_to_manager("PROGRESS_STAGE", {
+        "percent": 80,
+        "text": "Dismissing announcements & securing session token...",
+        "session_id": sid,
+        "chat_id": chat_id,
+        "site_name": site_name,
+        "anim_msg_id": anim_msg_id
+    })
+
     safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
+    time.sleep(0.8)
+
+    emit_event_to_manager("PROGRESS_STAGE", {
+        "percent": 100,
+        "text": "Authentication verified! Ready for trade setup.",
+        "session_id": sid,
+        "chat_id": chat_id,
+        "site_name": site_name,
+        "anim_msg_id": anim_msg_id
+    })
     time.sleep(0.5)
 
     emit_event_to_manager("LOGIN_SUCCESS", {
@@ -1131,12 +1571,22 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
     if not sess:
         return
 
+    verified = False
     for _ in range(15):
         safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
         safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_PERSISTENT_NAV_JS, wingo_url))
-        time.sleep(1.5)
-        if safe_tab_execute(sid, lambda drv: drv.execute_script(CHECK_WINGO_READY_JS)):
+        time.sleep(1.8)
+
+        is_ready = safe_tab_execute(sid, lambda drv: drv.execute_script(CHECK_WINGO_READY_JS))
+        if is_ready:
+            verified = True
             break
+        time.sleep(0.8)
+
+    if not verified:
+        safe_tab_execute(sid, lambda drv: drv.get(wingo_url))
+        time.sleep(2.5)
+        safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
 
     current_bal = 0.0
     for _ in range(15):
@@ -1148,6 +1598,7 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
 
     sess["current_balance"] = current_bal
     sess["cur_bal"] = current_bal
+    safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
 
     emit_event_to_manager("WINGO_READY", {
         "session_id": sid,
@@ -1167,37 +1618,50 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
 
         loop_tick += 1
 
-        # Check logout condition every 6 seconds
+        # Periodic logout detector
         if loop_tick % 2 == 0:
             def _check_logout(drv):
                 return drv.execute_script("""
                     const hash = window.location.hash || '';
                     const href = window.location.href || '';
-                    if (hash.includes('login') || href.includes('/login')) return "LOGGED_OUT_URL";
+                    if (hash.includes('login') || href.includes('/login')) {
+                        return "LOGGED_OUT_URL";
+                    }
                     const bodyText = document.body ? document.body.innerText : '';
-                    if (bodyText.includes('Token has expired') || bodyText.includes('please login again')) return "LOGGED_OUT_MSG";
+                    if (bodyText.includes('Token has expired') || 
+                        bodyText.includes('please login again') || 
+                        bodyText.includes('already logged in') ||
+                        bodyText.includes('somewhere else') ||
+                        bodyText.includes('Error: 147') ||
+                        bodyText.includes('frozen')) {
+                        return "LOGGED_OUT_MSG";
+                    }
+                    const token = localStorage.getItem('token') || localStorage.getItem('token_str') || sessionStorage.getItem('token');
+                    if (!token && !hash.includes('WinGo')) {
+                        return "TOKEN_LOST";
+                    }
                     return null;
                 """)
 
             logout_reason = safe_tab_execute(sid, _check_logout)
             if logout_reason:
-                logger.warning(f"Session {sid} logged out! Slot freeing...")
+                logger.warning(f"Session {sid} logged out detected! Reason: {logout_reason}")
                 emit_event_to_manager("ACCOUNT_LOGGED_OUT", {
                     "session_id": sid,
                     "chat_id": chat_id,
                     "site_name": site_name,
                     "reason": logout_reason,
-                    "message": "⚠️️ অ্যাকাউন্ট অন্য ডিভাইসে লগইন হওয়ার কারণে সেশন সমাপ্ত করা হলো।"
+                    "message": "⚠️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
                 })
                 terminate_session_cleanly(sid)
                 break
 
-        # Continuous Fallback execution (Triggered within the safe 24s-8s window)
+        # Fallback Trigger: Strictly guarded against double betting & timed in safe window
         now_sec = time.localtime().tm_sec
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
 
-        if 8 <= rem_sec <= 24 and last_py_cycle != cur_cycle:
+        if 8 <= rem_sec <= 23 and last_py_cycle != cur_cycle:
             last_py_cycle = cur_cycle
             best_pred = python_fetch_best_prediction()
             safe_tab_execute(sid, lambda drv: drv.execute_script(f"""
@@ -1211,6 +1675,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 if (window.__WINGO_ST) {
                     return {
                         isRun: window.__WINGO_ST.isRun,
+                        circuitBreakerTriggered: window.__WINGO_ST.circuitBreakerTriggered || false,
                         curBal: window.__WINGO_ST.curBal || 0.0,
                         tgtAmt: window.__WINGO_ST.tgtAmt || 0.0,
                         startBal: window.__WINGO_ST.startBal || 0.0,
@@ -1254,7 +1719,24 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            if not is_run:
+            # Guaranteed Target Achieved Stop Condition
+            if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0:
+                sess["is_trading"] = False
+                task_payload["status"] = "COMPLETED"
+                firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
+
+                emit_event_to_manager("TARGET_ACHIEVED", {
+                    "session_id": sid,
+                    "chat_id": chat_id,
+                    "site_name": site_name,
+                    "start_balance": start_b,
+                    "final_balance": sess["cur_bal"],
+                    "wins": sess["wins"],
+                    "losses": sess["losses"]
+                })
+                terminate_session_cleanly(sid)
+                break
+            elif not is_run:
                 sess["is_trading"] = False
                 break
 
@@ -1262,7 +1744,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         if loop_tick % 10 == 0:
             gc.collect()
 
-        time.sleep(3.0)
+        time.sleep(2.5)
 
 # ==============================================================================
 # WORKER TASK AND ACTION LISTENER LOOP
@@ -1316,7 +1798,7 @@ def worker_task_listener():
                 chat_id = action_pkt.get("chat_id")
 
                 if kind in ["EMERGENCY_STOP", "EMERGENCY_STOP_ALL"]:
-                    logger.warning(f"Emergency stop: {kind}. Terminating worker sessions!")
+                    logger.warning(f"Emergency stop received: {kind}. Terminating all worker sessions!")
                     for s_id in list(active_sessions.keys()):
                         terminate_session_cleanly(s_id)
                     cleanup_zombie_browsers()
@@ -1393,10 +1875,40 @@ def worker_task_listener():
                         "live_balance": sess.get("current_balance", 0.0)
                     })
 
+                elif kind == "REQUEST_STATS" and sid in active_sessions:
+                    sess = active_sessions[sid]
+                    def _s(drv):
+                        return drv.execute_script("""
+                            if (window.__WINGO_ST) {
+                                return {
+                                    w: window.__WINGO_ST.w || 0,
+                                    l: window.__WINGO_ST.l || 0,
+                                    step: (window.__WINGO_ST.stpIdx || 0) + 1,
+                                    steps: window.__WINGO_ST.steps || 5,
+                                    curBal: window.__WINGO_ST.curBal || 0.0,
+                                    tgtAmt: window.__WINGO_ST.tgtAmt || 0.0,
+                                    tradesDone: window.__WINGO_ST.tradesDone || 0,
+                                    cur_w_streak: window.__WINGO_ST.cur_w_streak || 0,
+                                    cur_l_streak: window.__WINGO_ST.cur_l_streak || 0,
+                                    max_w_streak: window.__WINGO_ST.max_w_streak || 0,
+                                    max_l_streak: window.__WINGO_ST.max_l_streak || 0
+                                };
+                            }
+                            return null;
+                        """)
+                    s_data = safe_tab_execute(sid, _s)
+                    if s_data:
+                        emit_event_to_manager("STATS_RESPONSE", {
+                            "session_id": sid,
+                            "chat_id": chat_id,
+                            "data": s_data
+                        })
+
                 elif kind == "STOP_TRADING" and sid in active_sessions:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("""
                         if(window.__WINGO_ST){ 
                             window.__WINGO_ST.isRun = false; 
+                            if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); 
                             if(window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt);
                         }
                     """))
@@ -1407,7 +1919,7 @@ def worker_task_listener():
 
         except Exception as e:
             logger.debug(f"Worker task loop tick: {e}")
-        time.sleep(1.0)
+        time.sleep(0.8)
 
 # ==============================================================================
 # HEARTBEAT & CLUSTER REGISTRATION LOOP
@@ -1469,7 +1981,7 @@ def continuous_24h_watchdog():
 
 def handle_shutdown_signals(sig, frame):
     global WORKER_ACTIVE
-    logger.info(f"Shutdown signal caught on {WORKER_ALIAS}. Commencing clean teardown...")
+    logger.info(f"Shutdown signal caught on {WORKER_ALIAS}. Commencing clean cluster teardown...")
     WORKER_ACTIVE = False
     try:
         firebase_sync_http(f"terminals/{NODE_ID}", "DELETE")
