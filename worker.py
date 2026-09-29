@@ -1,4 +1,3 @@
-
 # ==============================================================================
 # DRX WINGO CLUSTER - EXECUTION WORKER NODE (সম্পূর্ণ সমন্বিত ও ফিক্সড কোড)
 # ==============================================================================
@@ -14,6 +13,7 @@
 # - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
 # - Guaranteed 24/7 continuous trading until target balance is reached
 # - Precision Multi-Layer Win/Loss Detection (DOM Trend + API + Balance Differential)
+# - BST (UTC+6) Integrated Timezone Logging and Synchronization
 # - Zombie-free process teardown and admin kill switches (Railway 0.5GB RAM Safe)
 # ==============================================================================
 
@@ -31,17 +31,33 @@ import urllib.error
 import uuid
 import logging
 import signal
+from datetime import datetime, timezone, timedelta
 
 # ==============================================================================
-# AUTOMATIC DEPENDENCY BOOTSTRAP
+# BANGLADESH STANDARD TIME (BST / UTC+6) TIMEZONE CONFIGURATION
 # ==============================================================================
+BST_TZ = timezone(timedelta(hours=6))
+
+def bst_now():
+    """Returns the current datetime in Bangladesh Standard Time (UTC+6)."""
+    return datetime.now(BST_TZ)
+
+def bst_time_converter(*args):
+    """Custom logging converter to format timestamps in BST."""
+    return bst_now().timetuple()
+
+logging.Formatter.converter = bst_time_converter
+
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [WORKER] [%(levelname)s] %(message)s',
+    format='[%(asctime)s BST] [WORKER] [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger("WORKER_NODE")
 
+# ==============================================================================
+# AUTOMATIC DEPENDENCY BOOTSTRAP
+# ==============================================================================
 def ensure_dependencies():
     packages = [
         ("selenium", "selenium"),
@@ -197,6 +213,11 @@ def create_local_prediction_bridge_html():
             font-size: 13px;
             color: #8b949e;
         }}
+        .bst-clock {{
+            font-size: 12px;
+            color: #388bfd;
+            margin-top: 8px;
+        }}
     </style>
 </head>
 <body>
@@ -206,19 +227,31 @@ def create_local_prediction_bridge_html():
         <div class="signal-box" id="prediction-box">PRED: WAITING</div>
         <div class="status" id="rate-box">WIN RATE: --%</div>
         <div class="status" id="status-box">SYSTEM READY</div>
+        <div class="bst-clock" id="clock-bst">BST: --:--:--</div>
     </div>
 
     <script>
         const API_URL = "{PREDICTION_API_URL}";
         let lastTriggeredCycle = null;
 
+        function getBSTDate() {{
+            const d = new Date();
+            const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+            return new Date(utc + (3600000 * 6));
+        }}
+
         function updateTimer() {{
-            const now = new Date();
-            const seconds = now.getSeconds();
+            const nowBst = getBSTDate();
+            const seconds = nowBst.getSeconds();
             const remainingSeconds = 30 - (seconds % 30);
             const displaySec = remainingSeconds === 30 ? 0 : remainingSeconds;
             
             document.getElementById("timer").innerText = `00:${{String(displaySec).padStart(2, '0')}}`;
+            
+            const hours = String(nowBst.getHours()).padStart(2, '0');
+            const minutes = String(nowBst.getMinutes()).padStart(2, '0');
+            const secStr = String(seconds).padStart(2, '0');
+            document.getElementById("clock-bst").innerText = `BST: ${{hours}}:${{minutes}}:${{secStr}}`;
             return displaySec;
         }}
 
@@ -270,7 +303,7 @@ def create_local_prediction_bridge_html():
         setInterval(() => {{
             let rem = updateTimer();
             let cycle = Math.floor(Date.now() / 30000);
-            if (rem >= 20 && lastTriggeredCycle !== cycle) {{
+            if (rem >= 18 && rem <= 22 && lastTriggeredCycle !== cycle) {{
                 lastTriggeredCycle = cycle;
                 fetchPrediction();
             }}
@@ -326,6 +359,7 @@ def emit_event_to_manager(event_type: str, data: dict):
         "type": event_type,
         "worker_id": NODE_ID,
         "timestamp": time.time(),
+        "time_bst": bst_now().strftime("%Y-%m-%d %H:%M:%S BST"),
         **data
     }
     firebase_sync_http(f"manager_events/{uuid.uuid4().hex[:10]}", "PUT", payload)
@@ -816,17 +850,18 @@ const autoTotalSteps = parseInt(arguments[1]) || 5;
 const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
-    // Floating on-screen live prediction HUD
+    // Floating on-screen live prediction HUD with BST Clock
     let hud = document.getElementById('drx-prediction-hud');
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'drx-prediction-hud';
-        hud.style.cssText = 'position:fixed;top:10px;right:10px;z-index:999999;background:rgba(13,17,23,0.92);border:2px solid #30363d;border-radius:10px;padding:12px;color:#58a6ff;font-family:monospace;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.6);width:170px;pointer-events:none;';
+        hud.style.cssText = 'position:fixed;top:10px;right:10px;z-index:999999;background:rgba(13,17,23,0.92);border:2px solid #30363d;border-radius:10px;padding:12px;color:#58a6ff;font-family:monospace;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.6);width:175px;pointer-events:none;';
         hud.innerHTML = `
-            <div style="font-size:11px;font-weight:bold;color:#f0883e;">DRX VIP ENGINE</div>
+            <div style="font-size:11px;font-weight:bold;color:#f0883e;">DRX VIP ENGINE (BST)</div>
             <div id="timer" style="font-size:26px;font-weight:bold;color:#39d353;margin:4px 0;">00:30</div>
             <div id="hud-signal" style="font-size:14px;font-weight:bold;color:#ffffff;">SIGNAL: --</div>
             <div id="hud-rate" style="font-size:10px;color:#8b949e;">WIN RATE: --%</div>
+            <div id="hud-bst-time" style="font-size:10px;color:#58a6ff;margin-top:4px;">BST: --:--:--</div>
         `;
         document.body.appendChild(hud);
     }
@@ -880,6 +915,12 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         max_l_streak: 0
     };
     window.__WINGO_ST = st;
+
+    function getBSTDate() {
+        const d = new Date();
+        const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+        return new Date(utc + (3600000 * 6));
+    }
 
     function triggerBalanceRefresh() {
         try {
@@ -939,14 +980,21 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     }
 
     function updateTimer() {
-        const now = new Date();
-        const seconds = now.getSeconds();
+        const nowBst = getBSTDate();
+        const seconds = nowBst.getSeconds();
         const remainingSeconds = 30 - (seconds % 30);
         const displaySec = remainingSeconds === 30 ? 0 : remainingSeconds;
 
         let timerEl = document.getElementById("timer");
         if (timerEl) {
             timerEl.innerText = `00:${String(displaySec).padStart(2, '0')}`;
+        }
+        let bstEl = document.getElementById("hud-bst-time");
+        if (bstEl) {
+            let h = String(nowBst.getHours()).padStart(2, '0');
+            let m = String(nowBst.getMinutes()).padStart(2, '0');
+            let s = String(seconds).padStart(2, '0');
+            bstEl.innerText = `BST: ${h}:${m}:${s}`;
         }
         return displaySec;
     }
@@ -977,6 +1025,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         let stepsCount = parseInt(stepsCountVal) || 5;
         if (stepsCount < 1) stepsCount = 1;
 
+        // Martingale (2x multiplier)
         const sumPowers = Math.pow(2, stepsCount) - 1;
         const firstStep = balance / sumPowers;
 
@@ -1145,13 +1194,14 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                     }
                     if (dEl) drx_simClick(dEl);
 
+                    // Smooth 1.2 to 1.5 second buffer to close overlays & verify execution
                     setTimeout(() => {
                         let overlay = document.querySelector('.van-overlay');
                         if (overlay) try { overlay.click(); } catch(e){}
                         if (cb) cb(true);
-                    }, 120);
-                }, 160);
-            }, 100);
+                    }, 1200);
+                }, 200);
+            }, 150);
         } catch(e) {
             if (cb) cb(false);
         }
@@ -1231,6 +1281,9 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             if (st.lastBetPeriod && st.lastBetAmt > 0 && st.evaluatedPeriod !== st.lastBetPeriod) {
                 st.evaluatedPeriod = st.lastBetPeriod;
                 triggerBalanceRefresh();
+                
+                // Allow a brief 1.2-second settling pause before final win/loss validation
+                await new Promise(r => setTimeout(r, 1200));
                 let freshBal = chkBal();
                 let won = false;
                 let evaluatedMethod = "NONE";
@@ -1645,7 +1698,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             break
 
         # Fallback Trigger: Aligned with the settled window (18-15 seconds remaining)
-        now_sec = time.localtime().tm_sec
+        now_bst = bst_now()
+        now_sec = now_bst.second
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
 
@@ -1704,7 +1758,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "wins": sess["wins"],
                 "losses": sess["losses"],
                 "currency": "BDT",
-                "updated_at": time.time()
+                "updated_at": time.time(),
+                "updated_at_bst": bst_now().strftime("%Y-%m-%d %H:%M:%S BST")
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
@@ -1721,6 +1776,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
 
             # STRICT STOP CONDITION: Stops ONLY when target goal is fully reached
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0:
+                logger.info(f"Target balance reached! Goal: {tgt_amt} | Current: {sess['cur_bal']}. Stopping gracefully...")
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
                 firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
@@ -1740,7 +1796,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 sess["is_trading"] = False
                 break
 
-        # Periodic Garbage Collection (Every ~45 seconds) to avoid CPU spikes and lag
+        # Periodic Garbage Collection (Every ~45 seconds) to avoid CPU spikes and memory leaks
         if loop_tick_count % 30 == 0:
             gc.collect()
 
@@ -1944,7 +2000,8 @@ def worker_register_node():
         "alias": WORKER_ALIAS,
         "load": len(active_sessions),
         "latency_ms": cached_latency,
-        "registered_at": time.time()
+        "registered_at": time.time(),
+        "registered_at_bst": bst_now().strftime("%Y-%m-%d %H:%M:%S BST")
     }
     firebase_sync_http(f"terminals/{NODE_ID}", "PUT", node_payload)
     logger.info(f"Node registered in cluster as: {NODE_ID} (Alias: {WORKER_ALIAS})")
@@ -1958,7 +2015,8 @@ def worker_heartbeat_loop():
                 "status": status_val,
                 "load": len(active_sessions),
                 "alias": WORKER_ALIAS,
-                "latency_ms": cached_latency
+                "latency_ms": cached_latency,
+                "time_bst": bst_now().strftime("%Y-%m-%d %H:%M:%S BST")
             }
             firebase_sync_http(f"terminals/{NODE_ID}", "PATCH", hb_data)
         except Exception:
