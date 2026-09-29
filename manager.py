@@ -108,7 +108,7 @@ def format_bdt_target(val) -> str:
 # ==============================================================================
 # CONFIGURATION & CONSTANTS
 # ==============================================================================
-TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAEjRP2IBUzeOBttHlWbxu1pPhL79mBnvyY")
+TOKEN = os.environ.get("BOT_TOKEN", "8808949150:AAHo6oKX5sl42FaGKvyoLw4lMlezfUIir4s")
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@DARK67HACK")
