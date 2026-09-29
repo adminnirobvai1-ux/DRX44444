@@ -1,5 +1,5 @@
 # ==============================================================================
-# DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড)
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড - ফুল এক্সপ্যান্ডেড)
 # ==============================================================================
 # Responsibilities:
 # - Connects to Firebase RTDB and registers as an active worker terminal
@@ -7,10 +7,12 @@
 # - Generates local standalone prediction & timer HTML bridge on device
 # - Embeds on-screen live countdown & prediction HUD widget into target DOM
 # - Continuous 30-Second synchronized epoch timer with zero-second dispatch
-# - Multi-Engine Server Prediction Resolution (Max % Filter, Tie/Conflict Skip)
+# - Multi-Engine Server Prediction Resolution (Fixed variable scope, Zero-skip mode)
+# - Exact Step-Maker Martingale Mathematics (HTML logic mirror: 2^N - 1 scaling)
 # - Dual-layer execution: Browser JavaScript + Python CORS-Free Engine
+# - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
 # - Guaranteed target balance fulfillment & immediate browser release
-# - Zombie-free process teardown and admin kill switches
+# - Zombie-free process teardown and admin kill switches (Railway 0.5GB RAM Safe)
 # ==============================================================================
 
 import os
@@ -237,15 +239,14 @@ def create_local_prediction_bridge_html():
             let smalls = top.filter(x => x.pred === 'SMALL').length;
 
             if (top.length === 1) return top[0].pred;
-            if (top.length === 2) return bigs === 2 ? 'BIG' : (smalls === 2 ? 'SMALL' : 'SKIP');
-            if (top.length === 3) return bigs >= 2 ? 'BIG' : (smalls >= 2 ? 'SMALL' : 'SKIP');
+            if (top.length === 2) return bigs === 2 ? 'BIG' : (smalls === 2 ? 'SMALL' : 'BIG');
+            if (top.length === 3) return bigs >= 2 ? 'BIG' : (smalls >= 2 ? 'SMALL' : 'BIG');
             if (top.length === 4) {{
-                if (bigs === 4) return 'BIG';
-                if (smalls === 4) return 'SMALL';
-                if (bigs === 2 && smalls === 2) return 'SKIP';
-                return bigs >= 3 ? 'BIG' : (smalls >= 3 ? 'SMALL' : 'SKIP');
+                if (bigs >= 3) return 'BIG';
+                if (smalls >= 3) return 'SMALL';
+                return 'BIG';
             }}
-            return bigs === smalls ? 'SKIP' : (bigs > smalls ? 'BIG' : 'SMALL');
+            return bigs >= smalls ? 'BIG' : 'SMALL';
         }}
 
         async function fetchPrediction() {{
@@ -267,7 +268,7 @@ def create_local_prediction_bridge_html():
         setInterval(() => {{
             let rem = updateTimer();
             let cycle = Math.floor(Date.now() / 30000);
-            if (rem === 0 && lastTriggeredCycle !== cycle) {{
+            if (rem >= 20 && lastTriggeredCycle !== cycle) {{
                 lastTriggeredCycle = cycle;
                 fetchPrediction();
             }}
@@ -433,7 +434,7 @@ def terminate_session_cleanly(session_id):
     logger.info(f"Teardown complete. Worker {NODE_ID} slot is now 100% FREE.")
 
 # ==============================================================================
-# HARDENED BROWSER SESSION ISOLATION
+# HARDENED BROWSER SESSION ISOLATION (RAILWAY 0.5GB RAM HARDENED)
 # ==============================================================================
 def allocate_session_tab(session_id, target_url):
     sess = active_sessions.get(session_id)
@@ -461,6 +462,7 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
+    # 0.5GB Low Memory Tuning
     options.set_preference("dom.ipc.processCount", 1)
     options.set_preference("browser.sessionhistory.max_entries", 2)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
@@ -468,6 +470,7 @@ def allocate_session_tab(session_id, target_url):
     options.set_preference("javascript.options.mem.max", 32768)
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", True)
+    options.set_preference("browser.cache.memory.capacity", 2048)
     options.set_preference("network.http.use-cache", False)
     options.set_preference("network.prefetch-next", False)
     options.set_preference("webgl.disabled", True)
@@ -800,7 +803,7 @@ return 0.0;
 """
 
 # ==============================================================================
-# INTEGRATED MULTI-ENGINE TIMER & ON-SCREEN HUD JAVASCRIPT
+# INTEGRATED MULTI-ENGINE TIMER, STEP CALCULATOR & ON-SCREEN HUD JAVASCRIPT
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
@@ -808,7 +811,7 @@ const autoTotalSteps = parseInt(arguments[1]) || 5;
 const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
-    // Create or inject on-screen prediction and timer HUD
+    // On-screen floating prediction & live HUD
     let hud = document.getElementById('drx-prediction-hud');
     if (!hud) {
         hud = document.createElement('div');
@@ -860,6 +863,8 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         lastPred: null,
         lastPeriod: null,
         lastBetPeriod: null,
+        lastBetAmt: 0,
+        balanceBeforeBet: 0.0,
         lastTriggeredCycle: null,
         circuitBreakerTriggered: false,
         w: 0,
@@ -946,18 +951,26 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         return 'EPOCH_' + Math.floor(Date.now() / 30000);
     }
 
+    // HTML STEP-MAKER FORMULA MIRROR
     const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 100;
-        let n = parseInt(nSteps) || 5;
-        if (n < 1) n = 1;
-        let R = Math.pow(2, n) - 1;
-        let s1 = Math.floor(B / R);
-        if (s1 < 1) s1 = 1;
-        let seq = [s1];
-        for (let k = 1; k < n; k++) {
-            seq.push(seq[k - 1] * 2);
+        let balance = parseFloat(cBal) || 100;
+        let stepsCount = parseInt(nSteps) || 5;
+        if (stepsCount < 1) stepsCount = 1;
+        let sumPowers = Math.pow(2, stepsCount) - 1;
+        let firstStep = balance / sumPowers;
+        let steps = [];
+        let total = 0;
+        for (let i = 0; i < stepsCount; i++) {
+            let step = firstStep * Math.pow(2, i);
+            let roundedStep = Math.max(1, Math.round(step));
+            steps.push(roundedStep);
+            total += roundedStep;
         }
-        return seq;
+        let roundingError = Math.round(balance - total);
+        if (roundingError !== 0 && steps.length > 0) {
+            steps[stepsCount - 1] = Math.max(1, steps[stepsCount - 1] + roundingError);
+        }
+        return steps;
     };
 
     const drx_simClick = (el) => {
@@ -1017,26 +1030,23 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             else if (ts.pred === 'SMALL') smallCount++;
         });
 
+        // Zero-skip continuous resolution logic
         let finalPred = 'BIG';
         if (tiedCount === 1) finalPred = topServers[0].pred;
         else if (tiedCount === 2) {
             if (bigCount === 2) finalPred = 'BIG';
-            else if (smalls === 2) finalPred = 'SMALL';
-            else finalPred = 'SKIP';
+            else if (smallCount === 2) finalPred = 'SMALL';
+            else finalPred = topServers[0].pred || 'BIG';
         } else if (tiedCount === 3) {
             if (bigCount >= 2) finalPred = 'BIG';
             else if (smallCount >= 2) finalPred = 'SMALL';
-            else finalPred = 'SKIP';
+            else finalPred = topServers[0].pred || 'BIG';
         } else if (tiedCount === 4) {
-            if (bigCount === 4) finalPred = 'BIG';
-            else if (smallCount === 4) finalPred = 'SMALL';
-            else if (bigCount === 2 && smallCount === 2) finalPred = 'SKIP';
-            else if (bigCount >= 3) finalPred = 'BIG';
+            if (bigCount >= 3) finalPred = 'BIG';
             else if (smallCount >= 3) finalPred = 'SMALL';
-            else finalPred = 'SKIP';
+            else finalPred = topServers[0].pred || 'BIG';
         } else {
-            if (bigCount === smallCount) finalPred = 'SKIP';
-            else finalPred = bigCount > smallCount ? 'BIG' : 'SMALL';
+            finalPred = bigCount >= smallCount ? 'BIG' : 'SMALL';
         }
 
         return { pred: finalPred, rate: maxRate };
@@ -1126,15 +1136,8 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     // Public method for external Python fallback dispatch
     window.__WINGO_EXECUTE_TRADE = (forcedPred) => {
-        if (!st.isRun || isTargetAchieved()) return;
-        let amt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-        st.isTrd = true;
-        st.lastPred = forcedPred;
-        sessionStorage.setItem('drx_prev_bal', String(chkBal()));
-        exeTrdFast(forcedPred, amt, (success) => {
-            if (success) st.tradesDone++;
-            st.isTrd = false;
-        });
+        if (!st.isRun || isTargetAchieved() || st.isTrd) return;
+        executeCycleTradeWorkflow(forcedPred);
     };
 
     let initialBal = chkBal();
@@ -1145,7 +1148,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     let isFetchingApi = false;
 
-    const executeCycleTradeWorkflow = async () => {
+    const executeCycleTradeWorkflow = async (overridePred = null) => {
         if (isTargetAchieved() || isFetchingApi || st.isTrd) return;
         isFetchingApi = true;
 
@@ -1156,27 +1159,29 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
             let fetchUrl = predictionApiUrl + (predictionApiUrl.includes('?') ? '&' : '?') + "t=" + Date.now();
             let rawJson = null;
-            try {
-                let res = await fetch(fetchUrl);
-                if (res.ok) rawJson = await res.json();
-            } catch(fetchErr) {}
-
-            // Fallback to local storage if direct browser fetch hits CORS
-            if (!rawJson) {
+            if (!overridePred) {
                 try {
-                    let localItem = localStorage.getItem('drx_latest_pred');
-                    if (localItem) {
-                        let pObj = JSON.parse(localItem);
-                        if (Date.now() - pObj.time < 28000) {
-                            rawJson = { top_engine: { prediction: pObj.pred, win_rate: '70%' } };
+                    let res = await fetch(fetchUrl);
+                    if (res.ok) rawJson = await res.json();
+                } catch(fetchErr) {}
+
+                if (!rawJson) {
+                    try {
+                        let localItem = localStorage.getItem('drx_latest_pred');
+                        if (localItem) {
+                            let pObj = JSON.parse(localItem);
+                            if (Date.now() - pObj.time < 28000) {
+                                rawJson = { top_engine: { prediction: pObj.pred, win_rate: '70%' } };
+                            }
                         }
-                    }
-                } catch(e){}
+                    } catch(e){}
+                }
+            } else {
+                rawJson = { top_engine: { prediction: overridePred, win_rate: '85%' } };
             }
 
-            if (!rawJson || isTargetAchieved()) {
-                isFetchingApi = false;
-                return;
+            if (!rawJson) {
+                rawJson = { top_engine: { prediction: 'BIG', win_rate: '50%' } };
             }
 
             let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
@@ -1187,22 +1192,31 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
             let incomingPeriod = rawJson.period ? String(rawJson.period).trim() : ((nextObj && nextObj.period) ? String(nextObj.period).trim() : getLiveRoundId());
 
-            if (st.lastPred && st.lastBetPeriod) {
+            // Accurate Martingale outcome verification
+            if (st.lastPred && st.lastBetAmt > 0) {
                 let won = false;
                 let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
-                if (prevRecordedBal > 0 && liveB > prevRecordedBal) won = true;
-                else {
-                    let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod)) || histArray[0];
-                    if (finishedItem) {
-                        let actualSize = '';
-                        if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
-                        else if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
-                        else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
+                
+                if (prevRecordedBal > 0 && liveB > 0) {
+                    if (liveB > prevRecordedBal) {
+                        won = true;
+                    } else if (liveB < prevRecordedBal) {
+                        won = false;
+                    } else {
+                        let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod));
+                        if (finishedItem) {
+                            let actualSize = '';
+                            if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
+                            else if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                            else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
 
-                        if (finishedItem.status) {
-                            let statStr = String(finishedItem.status).toUpperCase();
-                            won = (statStr === 'WIN') ? true : (statStr === 'LOSS' ? false : (st.lastPred === actualSize));
-                        } else won = (st.lastPred === actualSize);
+                            if (finishedItem.status) {
+                                let statStr = String(finishedItem.status).toUpperCase();
+                                won = (statStr === 'WIN');
+                            } else won = (st.lastPred === actualSize);
+                        } else {
+                            won = false;
+                        }
                     }
                 }
 
@@ -1226,30 +1240,28 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                         if (st.timerInt) clearInterval(st.timerInt);
                         isFetchingApi = false;
                         return;
-                    } else st.stpIdx = st.stpIdx + 1;
+                    } else {
+                        st.stpIdx = st.stpIdx + 1;
+                    }
                 }
             }
 
             if (isTargetAchieved()) { isFetchingApi = false; return; }
 
             let outcome = resolvePredictionFromServers(rawJson);
-            let incomingPred = outcome.pred;
+            let incomingPred = overridePred || outcome.pred || 'BIG';
 
             let sEl = document.getElementById('hud-signal');
             let rEl = document.getElementById('hud-rate');
             if (sEl) sEl.innerText = "SIGNAL: " + incomingPred;
             if (rEl) rEl.innerText = "WIN RATE: " + outcome.rate + "%";
 
-            if (incomingPred === 'SKIP') {
-                st.lastBetPeriod = incomingPeriod;
-                isFetchingApi = false;
-                return;
-            }
-
             let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
             st.isTrd = true;
             st.lastPred = incomingPred;
             st.lastBetPeriod = incomingPeriod;
+            st.lastBetAmt = betAmt;
+            st.balanceBeforeBet = liveB;
             sessionStorage.setItem('drx_prev_bal', String(liveB));
 
             exeTrdFast(incomingPred, betAmt, (success) => {
@@ -1269,7 +1281,8 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         const rem = updateTimer();
         const currentCycle = Math.floor(Date.now() / 30000);
 
-        if (rem === 0 && st.lastTriggeredCycle !== currentCycle) {
+        // Immediate cycle execution: triggers at cycle shift (rem >= 6 avoids 5s lock)
+        if (st.lastTriggeredCycle !== currentCycle && rem >= 6) {
             st.lastTriggeredCycle = currentCycle;
             executeCycleTradeWorkflow();
         }
@@ -1282,10 +1295,10 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 """
 
 # ==============================================================================
-# PYTHON PARALLEL PREDICTION FETCH (CORS BYPASS & RESILIENT FALLBACK)
+# PYTHON PARALLEL PREDICTION FETCH (CORS BYPASS & ZERO-SKIP MODE)
 # ==============================================================================
 def python_fetch_best_prediction():
-    """পাইথন ব্যাকএন্ড থেকে সরাসরি EdgeOne API কল করে সেরা প্রেডিকশন বের করে।"""
+    """পাইথন ব্যাকএন্ড থেকে সরাসরি EdgeOne API কল করে সেরা প্রেডিকশন বের করে (নো স্কিপ)।"""
     try:
         req = urllib.request.Request(
             f"{PREDICTION_API_URL}?t={int(time.time()*1000)}",
@@ -1318,15 +1331,14 @@ def python_fetch_best_prediction():
         if len(top) == 1:
             return top[0]["pred"]
         elif len(top) == 2:
-            return "BIG" if bigs == 2 else ("SMALL" if smalls == 2 else "SKIP")
+            return "BIG" if bigs == 2 else ("SMALL" if smalls == 2 else "BIG")
         elif len(top) == 3:
-            return "BIG" if bigs >= 2 else ("SMALL" if smalls >= 2 else "SKIP")
+            return "BIG" if bigs >= 2 else ("SMALL" if smalls >= 2 else "BIG")
         elif len(top) == 4:
-            if bigs == 4: return "BIG"
-            if smalls == 4: return "SMALL"
-            if bigs == 2 and smalls == 2: return "SKIP"
-            return "BIG" if bigs >= 3 else ("SMALL" if smalls >= 3 else "SKIP")
-        return "SKIP" if bigs == smalls else ("BIG" if bigs > smalls else "SMALL")
+            if bigs >= 3: return "BIG"
+            if smalls >= 3: return "SMALL"
+            return "BIG"
+        return "BIG" if bigs >= smalls else "SMALL"
     except Exception:
         return "BIG"
 
@@ -1506,20 +1518,56 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         if not sess or not sess.get("is_trading"):
             break
 
-        # Python Precision Fallback: Runs every cycle at 00:00 to guarantee trade dispatch
+        # Check for logout / session takeover
+        def _check_logout(drv):
+            return drv.execute_script("""
+                const hash = window.location.hash || '';
+                const href = window.location.href || '';
+                if (hash.includes('login') || href.includes('/login')) {
+                    return "LOGGED_OUT_URL";
+                }
+                const bodyText = document.body ? document.body.innerText : '';
+                if (bodyText.includes('Token has expired') || 
+                    bodyText.includes('please login again') || 
+                    bodyText.includes('already logged in') ||
+                    bodyText.includes('somewhere else') ||
+                    bodyText.includes('Error: 147') ||
+                    bodyText.includes('frozen')) {
+                    return "LOGGED_OUT_MSG";
+                }
+                const token = localStorage.getItem('token') || localStorage.getItem('token_str') || sessionStorage.getItem('token');
+                if (!token && !hash.includes('WinGo')) {
+                    return "TOKEN_LOST";
+                }
+                return null;
+            """)
+
+        logout_reason = safe_tab_execute(sid, _check_logout)
+        if logout_reason:
+            logger.warning(f"Session {sid} logged out detected! Reason: {logout_reason}")
+            emit_event_to_manager("ACCOUNT_LOGGED_OUT", {
+                "session_id": sid,
+                "chat_id": chat_id,
+                "site_name": site_name,
+                "reason": logout_reason,
+                "message": "⚠️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
+            })
+            terminate_session_cleanly(sid)
+            break
+
+        # Python Precision Fallback: Runs every cycle at beginning of round to guarantee continuous trading
         now_sec = time.localtime().tm_sec
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
 
-        if rem_sec in [0, 30] and last_py_cycle != cur_cycle:
+        if rem_sec in [28, 29, 30, 0] and last_py_cycle != cur_cycle:
             last_py_cycle = cur_cycle
             best_pred = python_fetch_best_prediction()
-            if best_pred != "SKIP":
-                safe_tab_execute(sid, lambda drv: drv.execute_script(f"""
-                    if (window.__WINGO_EXECUTE_TRADE && window.__WINGO_ST && !window.__WINGO_ST.isTrd) {{
-                        window.__WINGO_EXECUTE_TRADE('{best_pred}');
-                    }}
-                """))
+            safe_tab_execute(sid, lambda drv: drv.execute_script(f"""
+                if (window.__WINGO_EXECUTE_TRADE && window.__WINGO_ST && !window.__WINGO_ST.isTrd) {{
+                    window.__WINGO_EXECUTE_TRADE('{best_pred}');
+                }}
+            """))
 
         def _get_st(drv):
             return drv.execute_script("""
@@ -1607,6 +1655,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 sess["is_trading"] = False
                 break
 
+        # Low-RAM Garbage Collection Cycle
+        gc.collect()
         time.sleep(1.5)
 
 # ==============================================================================
