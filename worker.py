@@ -1,3 +1,20 @@
+# ==============================================================================
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড)
+# ==============================================================================
+# Responsibilities:
+# - Connects to Firebase RTDB and registers as an active worker terminal
+# - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
+# - Performs auto-login across 6 platforms, resolves Error 22 auto-takeover
+# - Progress percentage stages (₂₀%, ₄₀%, ₆₀%, ₈₀%, ₁₀₀%) sent to Telegram
+# - Executes 24/7 continuous consecutive round betting (WinGo 30S) without skipping
+# - Ultra-fast <350ms bet dispatch on incoming periods
+# - Precision balance formatting with decimals/paisa, zero-paisa bets
+# - Multi-Engine Server Prediction Resolution (Max % Filter, Tie/Conflict Skip)
+# - Absolute target balance fulfillment & immediate browser release
+# - Guaranteed zombie-free browser teardown & process hygiene
+# - Admin fleet kill switches (/data, /device, STOP / FREE ALL)
+# ==============================================================================
+
 import os
 import sys
 import subprocess
@@ -277,6 +294,7 @@ def terminate_session_cleanly(session_id):
     cleanup_zombie_browsers()
     gc.collect()
 
+    # Reset worker node status to FREE in Firebase
     firebase_sync_http(f"terminals/{NODE_ID}", "PATCH", {
         "status": "FREE",
         "assigned_user_id": None,
@@ -655,12 +673,12 @@ return 0.0;
 """
 
 # ==============================================================================
-# 9. INTEGRATED TIMER-BASED EXECUTION ENGINE (WITH MULTI-SERVER CONSENSUS LOGIC)
+# INTEGRATED MULTI-ENGINE TIMER-DRIVEN CONTINUOUS 30S BETTING ENGINE
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
 const autoTotalSteps = parseInt(arguments[1]) || 5;
-const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
+const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
     let ghostContainer = document.getElementById('sys-core-fin');
@@ -672,10 +690,9 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
     }
 
     if (window.__WINGO_ST && window.__WINGO_ST.isRun) {
-        window.__WINGO_ST.steps = Math.max(1, parseInt(autoTotalSteps) || 5);
-        if (autoTargetGoal && autoTargetGoal > 0) {
-            let liveBal = (typeof chkBal === 'function') ? chkBal() : window.__WINGO_ST.curBal;
-            window.__WINGO_ST.tgtAmt = (autoTargetGoal <= liveBal && liveBal > 0) ? (liveBal + autoTargetGoal) : autoTargetGoal;
+        window.__WINGO_ST.steps = Math.max(1, autoTotalSteps);
+        if (autoTargetGoal > 0) {
+            window.__WINGO_ST.tgtAmt = autoTargetGoal;
         }
         return "ALREADY_RUNNING_UPDATED";
     }
@@ -685,21 +702,23 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
         if (window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt);
     }
 
-    const cfg = { fRt: 300, syncDly: 2500, minSf: 10 };
     const st = {
         isRun: true,
-        tgtAmt: 0,
-        startBal: 0,
-        curBal: 0,
+        tgtAmt: autoTargetGoal,
+        startBal: 0.0,
+        curBal: 0.0,
         autoInt: null,
         timerInt: null,
         isTrd: false,
+        targetReached: false,
         stpIdx: 0,
-        steps: Math.max(1, parseInt(autoTotalSteps) || 5),
+        steps: Math.max(1, autoTotalSteps),
         dynSeq: [],
         tradesDone: 0,
         lastPred: null,
         lastPeriod: null,
+        lastBetPeriod: null,
+        lastTriggeredCycle: null,
         circuitBreakerTriggered: false,
         w: 0,
         l: 0,
@@ -710,6 +729,7 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
     };
     window.__WINGO_ST = st;
 
+    // Live balance inspector - captures decimals accurately
     function chkBal() {
         try {
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
@@ -724,7 +744,7 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
                     }
                 }
             }
-            let els = document.querySelectorAll('*');
+            let els = document.querySelectorAll('span, div, p');
             for (let i = 0; i < els.length; i++) {
                 let txt = els[i].innerText || '';
                 if (txt.includes('Wallet balance') || txt.includes('Balance')) {
@@ -736,92 +756,77 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
                     }
                 }
             }
-            for (let i = 0; i < els.length; i++) {
-                let txt = els[i].innerText || '';
-                if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
-                    st.curBal = parseFloat(txt.replace(/[^\d.]/g, ''));
-                    return st.curBal;
-                }
-            }
         } catch(e) {}
-        return st.curBal || 0;
+        return st.curBal || 0.0;
     }
 
-    function isTargetReached() {
-        let liveBal = chkBal();
-        if (st.tgtAmt > 0 && liveBal >= st.tgtAmt && st.startBal > 0) {
+    // Target Balance Verification & Race-Condition Stopper
+    function isTargetAchieved() {
+        if (st.targetReached) return true;
+        let b = chkBal();
+        if (st.tgtAmt > 0 && st.startBal > 0 && (b >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
+            st.targetReached = true;
             st.isRun = false;
             st.isTrd = false;
-            if (st.autoInt) clearInterval(st.autoInt);
-            if (st.timerInt) clearInterval(st.timerInt);
+            if (st.autoInt) {
+                clearInterval(st.autoInt);
+                st.autoInt = null;
+            }
+            if (st.timerInt) {
+                clearInterval(st.timerInt);
+                st.timerInt = null;
+            }
             return true;
         }
         return false;
     }
 
-    function getRemainingSeconds() {
-        try {
-            const timeSelectors = [
-                '.time-box', '.Time', '.van-count-down', '[class*="countdown" i]',
-                '.Betting__C-head-r', '.clock', '[class*="TimeBox" i]', '[class*="time" i]'
-            ];
-            for (let sel of timeSelectors) {
-                let el = document.querySelector(sel);
-                if (el && el.offsetParent !== null) {
-                    let txt = (el.innerText || '').trim();
-                    let m = txt.match(/(\d+)\s*:\s*(\d+)/);
-                    if (m) {
-                        return (parseInt(m[1], 10) * 60) + parseInt(m[2], 10);
-                    }
-                    let spans = el.querySelectorAll('span, div, p');
-                    if (spans.length >= 2) {
-                        let digits = [];
-                        spans.forEach(s => {
-                            let t = (s.innerText || '').trim();
-                            if (/^\d+$/.test(t) && t.length <= 2) digits.push(t);
-                        });
-                        if (digits.length >= 2) {
-                            let secStr = digits.slice(-2).join('');
-                            let parsed = parseInt(secStr, 10);
-                            if (!isNaN(parsed) && parsed <= 60) return parsed;
-                        }
-                    }
-                }
-            }
-            let allTimeEls = document.querySelectorAll('*');
-            for (let i = 0; i < allTimeEls.length; i++) {
-                let txt = (allTimeEls[i].innerText || '').trim();
-                let m = txt.match(/^00\s*:\s*(\d{2})$/);
-                if (m) {
-                    return parseInt(m[1], 10);
-                }
-            }
-        } catch(e){}
-        return -1;
+    // WinGo 30S Countdown Inspector & DOM Synchronizer
+    function updateTimer() {
+        const now = new Date();
+        const seconds = now.getSeconds();
+        const remainingSeconds = 30 - (seconds % 30);
+        const displaySec = remainingSeconds === 30 ? 0 : remainingSeconds;
+
+        let timerEl = document.getElementById("timer");
+        if (timerEl) {
+            timerEl.innerText = `00:${String(displaySec).padStart(2, '0')}`;
+        }
+        return displaySec;
     }
 
+    // WinGo Current Period Inspector from DOM with fallback to 30s Epoch Round
+    function getLiveRoundId() {
+        try {
+            let allTextEls = document.querySelectorAll('div, span, p, h3');
+            for (let i = 0; i < allTextEls.length; i++) {
+                let t = (allTextEls[i].innerText || '').trim();
+                if (/^20\d{12,18}$/.test(t) && allTextEls[i].children.length === 0) {
+                    return t;
+                }
+            }
+            let pEl = document.querySelector('.Game__C-title-sub, .Time__C-num, [class*="period" i], [class*="issue" i]');
+            if (pEl) {
+                let m = (pEl.innerText || '').match(/(\d{12,20})/);
+                if (m) return m[1];
+            }
+        } catch(e){}
+        return 'EPOCH_' + Math.floor(Date.now() / 30000);
+    }
+
+    // STRICT MARTINGALE RATIO MODEL
     const calcSeq = (cBal, nSteps) => {
-        let B = Math.floor(Number(cBal)) || 0;
+        let B = Math.floor(Number(cBal)) || 100;
         let n = parseInt(nSteps) || 5;
         if (n < 1) n = 1;
-        let u = Math.pow(2, n) - 1;
-        let s1 = Math.floor(B / u);
+        let R = Math.pow(2, n) - 1;
+        let s1 = Math.floor(B / R);
         if (s1 < 1) s1 = 1;
-        let seq = [];
-        let sum = 0;
+        let seq = [s1];
         for (let k = 1; k < n; k++) {
-            let sk = Math.floor(s1 * Math.pow(2, k - 1));
-            seq.push(sk);
-            sum += sk;
+            seq.push(seq[k - 1] * 2);
         }
-        let sn = Math.floor(B - sum);
-        seq.push(sn > 0 ? sn : Math.floor(s1 * Math.pow(2, n - 1)));
         return seq;
-    };
-
-    const drx_triggerEvent = (el, etype) => {
-        let ev = new Event(etype, { bubbles: true, cancelable: true });
-        el.dispatchEvent(ev);
     };
 
     const drx_simClick = (el) => {
@@ -836,19 +841,113 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
         }
     };
 
-    const exeTrd = (pred, amt, cb) => {
+    // =========================================================================
+    // MULTI-ENGINE RESOLUTION & TIE-BREAKER ARBITRATION LOGIC
+    // =========================================================================
+    function resolvePredictionFromServers(rawJson) {
+        let serverList = [];
+        if (Array.isArray(rawJson.servers) && rawJson.servers.length > 0) {
+            serverList = rawJson.servers;
+        } else if (rawJson.data && Array.isArray(rawJson.data.servers) && rawJson.data.servers.length > 0) {
+            serverList = rawJson.data.servers;
+        }
+
+        // Fallback if no server array is present
+        if (serverList.length === 0) {
+            if (rawJson.top_engine && rawJson.top_engine.prediction) {
+                let p = String(rawJson.top_engine.prediction).toUpperCase().trim();
+                return (p.includes('SMALL') ? 'SMALL' : 'BIG');
+            }
+            if (rawJson.prediction && rawJson.prediction.result) {
+                let p = String(rawJson.prediction.result).toUpperCase().trim();
+                return (p.includes('SMALL') ? 'SMALL' : 'BIG');
+            }
+            return 'BIG';
+        }
+
+        // Normalize and extract numeric win_rate for each server
+        let parsed = serverList.map(s => {
+            let rateRaw = String(s.win_rate || s.percentage || s.rate || '0');
+            let m = rateRaw.match(/(\d+\.?\d*)/);
+            let rateNum = m ? parseFloat(m[1]) : 0.0;
+            let rawP = String(s.prediction || s.result || s.pred || s.size || '').toUpperCase().trim();
+            let normP = rawP.includes('SMALL') ? 'SMALL' : (rawP.includes('BIG') ? 'BIG' : '');
+            return {
+                server: s.server || s.name || '',
+                rate: rateNum,
+                pred: normP
+            };
+        }).filter(item => item.pred === 'BIG' || item.pred === 'SMALL');
+
+        if (parsed.length === 0) {
+            return 'BIG';
+        }
+
+        // 1. Find the highest percentage
+        let maxRate = -1;
+        for (let i = 0; i < parsed.length; i++) {
+            if (parsed[i].rate > maxRate) {
+                maxRate = parsed[i].rate;
+            }
+        }
+
+        // 2. Filter all servers that achieved this highest win_rate
+        let topServers = parsed.filter(item => Math.abs(item.rate - maxRate) < 0.001);
+        let tiedCount = topServers.length;
+
+        let bigCount = 0;
+        let smallCount = 0;
+        topServers.forEach(ts => {
+            if (ts.pred === 'BIG') bigCount++;
+            else if (ts.pred === 'SMALL') smallCount++;
+        });
+
+        // 3. Apply Decision & Tie-Breaking Rules:
+        // Case A: Single highest engine
+        if (tiedCount === 1) {
+            return topServers[0].pred;
+        }
+
+        // Case B: 2 servers tied at highest percentage
+        if (tiedCount === 2) {
+            if (bigCount === 2) return 'BIG';
+            if (smallCount === 2) return 'SMALL';
+            // One says Big, one says Small -> conflict -> SKIP
+            return 'SKIP';
+        }
+
+        // Case C: 3 servers tied at highest percentage
+        if (tiedCount === 3) {
+            if (bigCount >= 2) return 'BIG';      // 3 Big or 2 Big + 1 Small
+            if (smallCount >= 2) return 'SMALL';  // 3 Small or 2 Small + 1 Big
+            return 'SKIP';
+        }
+
+        // Case D: 4 servers tied at highest percentage
+        if (tiedCount === 4) {
+            if (bigCount === 4) return 'BIG';
+            if (smallCount === 4) return 'SMALL';
+            // 2 Big and 2 Small (দুইটাই দুই রকম) -> SKIP
+            if (bigCount === 2 && smallCount === 2) return 'SKIP';
+            // Clear majority 3 vs 1
+            if (bigCount >= 3) return 'BIG';
+            if (smallCount >= 3) return 'SMALL';
+            return 'SKIP';
+        }
+
+        // Case E: 5 or more servers tied
+        if (bigCount === smallCount) return 'SKIP';
+        return bigCount > smallCount ? 'BIG' : 'SMALL';
+    }
+
+    // Fast non-blocking trade execution (<350ms)
+    const exeTrdFast = (pred, amt, cb) => {
+        if (isTargetAchieved() || !st.isRun) {
+            if (cb) cb(false);
+            return;
+        }
+
         try {
-            if (isTargetReached()) {
-                if (cb) cb(false);
-                return;
-            }
-
-            let remSec = getRemainingSeconds();
-            if (remSec <= 5 && remSec > 0) {
-                if (cb) cb(false);
-                return;
-            }
-
             let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
             if (lingeringDialog) {
                 let cBtn = lingeringDialog.querySelector('.van-dialog__confirm, button');
@@ -856,8 +955,8 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
                 try { lingeringDialog.remove(); } catch(e){}
             }
 
-            let btn = null;
             let targetText = String(pred).toLowerCase().trim();
+            let btn = null;
             let btns = document.querySelectorAll('button, div, span');
             for (let i = 0; i < btns.length; i++) {
                 let t = (btns[i].innerText || '').trim().toLowerCase();
@@ -867,8 +966,8 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
                 }
             }
             if (!btn) {
-                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i], div[class*="big" i]');
-                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i], div[class*="small" i]');
+                if (targetText === 'big') btn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i]');
+                else if (targetText === 'small') btn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i]');
                 else if (targetText === 'green') btn = document.querySelector('button[class*="green"], div[class*="green"]');
                 else if (targetText === 'red') btn = document.querySelector('button[class*="red"], div[class*="red"]');
                 else if (targetText === 'violet') btn = document.querySelector('button[class*="violet"], div[class*="violet"]');
@@ -877,60 +976,55 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
                 if (cb) cb(false);
                 return;
             }
+
             drx_simClick(btn);
 
-            let checkAttempts = 0;
-            let valInterval = setInterval(() => {
-                checkAttempts++;
-
-                if (isTargetReached()) {
-                    clearInterval(valInterval);
-                    let closeBtn = document.querySelector('.van-popup__close-icon, .dialog-close, button.van-dialog__cancel');
-                    if (closeBtn) try { closeBtn.click(); } catch(e){}
+            setTimeout(() => {
+                if (isTargetAchieved() || !st.isRun) {
                     if (cb) cb(false);
                     return;
                 }
 
-                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input, input[inputmode='numeric']");
-                if (inpEl || checkAttempts > 18) {
-                    clearInterval(valInterval);
-                    if (inpEl) {
-                        inpEl.focus();
-                        let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-                        if (setV) setV.call(inpEl, String(amt));
-                        else inpEl.value = amt;
-                        drx_triggerEvent(inpEl, 'input');
-                        drx_triggerEvent(inpEl, 'change');
-                        drx_triggerEvent(inpEl, 'blur');
-                    }
-                    setTimeout(() => {
-                        if (isTargetReached()) {
-                            let closeBtn = document.querySelector('.van-popup__close-icon, .dialog-close, button.van-dialog__cancel');
-                            if (closeBtn) try { closeBtn.click(); } catch(e){}
-                            if (cb) cb(false);
-                            return;
-                        }
+                let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
+                if (inpEl) {
+                    inpEl.focus();
+                    let setV = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                    if (setV) setV.call(inpEl, String(amt));
+                    else inpEl.value = amt;
+                    inpEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    inpEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
 
-                        let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
-                        if (!dEl) {
-                            let docButtons = document.querySelectorAll('button, div[role="button"]');
-                            for (let b of docButtons) {
-                                let txt = (b.innerText || '').toLowerCase();
-                                if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
-                                    dEl = b;
-                                    break;
-                                }
+                setTimeout(() => {
+                    if (isTargetAchieved() || !st.isRun) {
+                        if (cb) cb(false);
+                        return;
+                    }
+
+                    let dEl = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
+                    if (!dEl) {
+                        let docButtons = document.querySelectorAll('button, div[role="button"]');
+                        for (let b of docButtons) {
+                            let txt = (b.innerText || '').toLowerCase();
+                            if ((txt.includes('total amount') || txt.includes('total') || txt.includes('confirm') || txt.includes('bet')) && b.offsetParent) {
+                                dEl = b;
+                                break;
                             }
                         }
-                        if (dEl) {
-                            drx_simClick(dEl);
+                    }
+                    if (dEl) {
+                        drx_simClick(dEl);
+                    }
+
+                    setTimeout(() => {
+                        let overlay = document.querySelector('.van-overlay');
+                        if (overlay) {
+                            try { overlay.click(); } catch(e){}
                         }
-                        setTimeout(() => {
-                            if (cb) cb(true);
-                        }, 1800);
-                    }, 700);
-                }
-            }, 180);
+                        if (cb) cb(true);
+                    }, 120);
+                }, 160);
+            }, 100);
         } catch(e) {
             if (cb) cb(false);
         }
@@ -939,284 +1033,179 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
-    let targetProfitVal = parseFloat(autoTargetGoal) || 0;
-    st.tgtAmt = (targetProfitVal <= initialBal && initialBal > 0) ? (initialBal + targetProfitVal) : targetProfitVal;
-    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : st.tgtAmt, st.steps);
+    st.dynSeq = calcSeq(initialBal > 0 ? initialBal : 100, st.steps);
     st.stpIdx = 0;
-    sessionStorage.removeItem('drx_sig');
 
     let isFetchingApi = false;
-    let isExecutingCycle = false;
 
-    // Automated Prediction Fetch & Multi-Server Consensus Resolution
-    const triggerAutomatedExecution = async () => {
-        if (isTargetReached()) return;
-        if (!st.isRun || st.isTrd || isFetchingApi || isExecutingCycle) return;
-
-        isExecutingCycle = true;
+    // =========================================================================
+    // TIMER EXPIRATION TRIGGER & AUTOMATED EXECUTION WORKFLOW
+    // =========================================================================
+    const executeCycleTradeWorkflow = async () => {
+        if (isTargetAchieved()) return;
+        if (isFetchingApi || st.isTrd) return;
         isFetchingApi = true;
 
         try {
-            if (isTargetReached()) {
+            let liveB = chkBal();
+            if (liveB > 0 && st.startBal <= 0) {
+                st.startBal = liveB;
+            }
+
+            if (isTargetAchieved()) {
                 isFetchingApi = false;
-                isExecutingCycle = false;
                 return;
             }
 
-            const fetchApiPayload = async (url) => {
-                const ctrl = new AbortController();
-                const tid = setTimeout(() => ctrl.abort(), 4500);
-                try {
-                    const sep = url.includes('?') ? '&' : '?';
-                    const res = await fetch(`${url}${sep}_t=${Date.now()}`, { signal: ctrl.signal });
-                    clearTimeout(tid);
-                    if (!res.ok) return null;
-                    return await res.json();
-                } catch(err) {
-                    clearTimeout(tid);
-                    return null;
+            // Step 1: Make prediction API call
+            let fetchUrl = predictionApiUrl + (predictionApiUrl.includes('?') ? '&' : '?') + "t=" + Date.now();
+            let rawJson = null;
+            try {
+                let res = await fetch(fetchUrl);
+                if (res.ok) {
+                    rawJson = await res.json();
                 }
-            };
-
-            let payload = await fetchApiPayload(targetApiUrl);
-            if (!payload) {
-                payload = await fetchApiPayload("https://drx-tm-vip-hack-code6.edgeone.dev/pid.json");
-            }
-
-            if (isTargetReached()) {
+            } catch(fetchErr) {
                 isFetchingApi = false;
-                isExecutingCycle = false;
                 return;
             }
 
-            if (payload && payload.period && Array.isArray(payload.servers) && payload.servers.length > 0) {
-                const currentPeriod = String(payload.period).trim();
-                const sessionSig = sessionStorage.getItem('drx_sig');
+            if (!rawJson) {
+                isFetchingApi = false;
+                return;
+            }
 
-                if (currentPeriod && currentPeriod !== sessionSig) {
-                    // Evaluate Previous Round Result
-                    if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
-                        let actualR = '';
-                        if (payload.last_period && payload.last_period.size) {
-                            actualR = String(payload.last_period.size).toUpperCase().trim();
+            if (isTargetAchieved()) {
+                isFetchingApi = false;
+                return;
+            }
+
+            let nextObj = rawJson.next || (rawJson.data && rawJson.data.next) || null;
+            let histArray = rawJson.history_preview || rawJson.history || (rawJson.data && rawJson.data.history) || [];
+            if (rawJson.last_period && rawJson.last_period.period) {
+                histArray = [rawJson.last_period, ...histArray];
+            }
+
+            let incomingPeriod = rawJson.period ? String(rawJson.period).trim() : ((nextObj && nextObj.period) ? String(nextObj.period).trim() : getLiveRoundId());
+
+            // Step 2: Evaluate previous round result and update Martingale sequence
+            if (st.lastPred && st.lastBetPeriod) {
+                let won = false;
+                let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_prev_bal') || '0');
+                if (prevRecordedBal > 0 && liveB > prevRecordedBal) {
+                    won = true;
+                } else {
+                    let finishedItem = histArray.find(h => String(h.period || h.pid) === String(st.lastBetPeriod)) || histArray[0];
+                    if (finishedItem) {
+                        let actualSize = '';
+                        if (finishedItem.size) {
+                            actualSize = String(finishedItem.size).toUpperCase().trim();
+                        } else if (finishedItem.actual_size) {
+                            actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                        } else if (typeof finishedItem.actual === 'number') {
+                            actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
+                        } else if (finishedItem.actual) {
+                            let actStr = String(finishedItem.actual).toUpperCase().trim();
+                            if (actStr === 'BIG' || actStr === 'SMALL') actualSize = actStr;
+                            else if (!isNaN(parseInt(actStr))) actualSize = parseInt(actStr) >= 5 ? 'BIG' : 'SMALL';
                         }
 
-                        let won = false;
-                        if (actualR) {
-                            won = (st.lastPred === actualR);
+                        if (finishedItem.status) {
+                            let statStr = String(finishedItem.status).toUpperCase();
+                            if (statStr === 'WIN') won = true;
+                            else if (statStr === 'LOSS') won = false;
+                            else won = (st.lastPred === actualSize);
                         } else {
-                            let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
-                            if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
-                                won = true;
-                            }
-                        }
-
-                        if (won) {
-                            st.w++;
-                            st.cur_w_streak++;
-                            st.cur_l_streak = 0;
-                            if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                            st.stpIdx = 0;
-                        } else {
-                            st.l++;
-                            st.cur_l_streak++;
-                            st.cur_w_streak = 0;
-                            if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-
-                            if (st.stpIdx >= st.steps - 1) {
-                                st.circuitBreakerTriggered = true;
-                                st.isRun = false;
-                                st.isTrd = false;
-                                if (st.autoInt) clearInterval(st.autoInt);
-                                if (st.timerInt) clearInterval(st.timerInt);
-                                isFetchingApi = false;
-                                isExecutingCycle = false;
-                                return;
-                            } else {
-                                st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
-                            }
+                            won = (st.lastPred === actualSize);
                         }
                     }
+                }
 
-                    // Multi-Server Win Rate & Consensus Resolution Algorithm
-                    const parsePercent = (val) => {
-                        if (typeof val === 'number') return val;
-                        if (typeof val === 'string') {
-                            let clean = parseFloat(val.replace('%', '').trim());
-                            return isNaN(clean) ? 0 : clean;
-                        }
-                        return 0;
-                    };
+                if (won) {
+                    st.w++;
+                    st.cur_w_streak++;
+                    st.cur_l_streak = 0;
+                    if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                    st.stpIdx = 0;
+                    st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
+                } else {
+                    st.l++;
+                    st.cur_l_streak++;
+                    st.cur_w_streak = 0;
+                    if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
 
-                    const parsedServers = payload.servers
-                        .map(s => {
-                            let p = (s.prediction || '').toString().trim().toUpperCase();
-                            return {
-                                server: s.server || '',
-                                name: s.name || '',
-                                prediction: (p === 'BIG' || p === 'SMALL') ? p : null,
-                                winRate: parsePercent(s.win_rate)
-                            };
-                        })
-                        .filter(s => s.prediction !== null);
-
-                    if (parsedServers.length === 0) {
+                    if (st.stpIdx >= st.steps - 1) {
+                        st.circuitBreakerTriggered = true;
+                        st.isRun = false;
                         st.isTrd = false;
+                        if (st.autoInt) clearInterval(st.autoInt);
+                        if (st.timerInt) clearInterval(st.timerInt);
                         isFetchingApi = false;
-                        isExecutingCycle = false;
                         return;
+                    } else {
+                        st.stpIdx = st.stpIdx + 1;
                     }
-
-                    // 1. Identify Maximum Win Rate
-                    let maxRate = -1;
-                    for (let s of parsedServers) {
-                        if (s.winRate > maxRate) maxRate = s.winRate;
-                    }
-
-                    // 2. Filter tied top-performing servers
-                    const topServers = parsedServers.filter(s => s.winRate === maxRate);
-                    const count = topServers.length;
-                    const bigCount = topServers.filter(s => s.prediction === 'BIG').length;
-                    const smallCount = topServers.filter(s => s.prediction === 'SMALL').length;
-
-                    let decidedPrediction = null;
-
-                    // 3. Apply Decision Consensus Matrix
-                    if (count === 1) {
-                        // Single dominant server takes trade
-                        decidedPrediction = topServers[0].prediction;
-                    } else if (count === 2) {
-                        // 2 tied servers: Must agree 100%, else skip
-                        if (bigCount === 2) decidedPrediction = 'BIG';
-                        else if (smallCount === 2) decidedPrediction = 'SMALL';
-                    } else if (count === 3) {
-                        // 3 tied servers: Unanimous or 2 vs 1 majority rule
-                        if (bigCount >= 2) decidedPrediction = 'BIG';
-                        else if (smallCount >= 2) decidedPrediction = 'SMALL';
-                    } else if (count >= 4) {
-                        // 4+ tied servers: Must be 100% unanimous agreement, else skip
-                        if (bigCount === count) decidedPrediction = 'BIG';
-                        else if (smallCount === count) decidedPrediction = 'SMALL';
-                    }
-
-                    // If tie resulted in conflict or skip decision
-                    if (!decidedPrediction) {
-                        st.lastPred = null;
-                        sessionStorage.setItem('drx_sig', currentPeriod);
-                        setTimeout(() => {
-                            st.isTrd = false;
-                            isExecutingCycle = false;
-                        }, 1000);
-                        return;
-                    }
-
-                    // Execute trade with consensus choice
-                    st.lastPred = decidedPrediction;
-                    st.lastPeriod = currentPeriod;
-                    st.isTrd = true;
-
-                    let nBal = chkBal();
-                    if (isTargetReached()) {
-                        st.isTrd = false;
-                        isFetchingApi = false;
-                        isExecutingCycle = false;
-                        return;
-                    }
-
-                    st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
-                    if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
-                    let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-
-                    if (nBal > 0 && nBal < tAmt) {
-                        st.stpIdx = 0;
-                        st.isTrd = false;
-                        isFetchingApi = false;
-                        isExecutingCycle = false;
-                        return;
-                    }
-
-                    exeTrd(decidedPrediction, tAmt, (suc) => {
-                        if (suc) {
-                            sessionStorage.setItem('drx_sig', currentPeriod);
-                            sessionStorage.setItem('drx_p_bal', String(st.curBal));
-                            st.tradesDone++;
-                        } else {
-                            st.lastPred = null;
-                        }
-                        setTimeout(() => {
-                            st.isTrd = false;
-                            isExecutingCycle = false;
-                            isTargetReached();
-                        }, 1000);
-                    });
                 }
             }
-        } catch(e) {
+
+            if (isTargetAchieved()) {
+                isFetchingApi = false;
+                return;
+            }
+
+            // Step 3: Extract prediction using highest percentage & tie-breaker logic
+            let incomingPred = resolvePredictionFromServers(rawJson);
+
+            // If the servers conflicted or equal tie resulted in SKIP -> Skip round
+            if (incomingPred === 'SKIP') {
+                st.lastBetPeriod = incomingPeriod;
+                isFetchingApi = false;
+                return;
+            }
+
+            // Step 4: Calculate bet amount & execute trade immediately
+            let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+
+            st.isTrd = true;
+            st.lastPred = incomingPred;
+            st.lastBetPeriod = incomingPeriod;
+            sessionStorage.setItem('drx_prev_bal', String(liveB));
+
+            exeTrdFast(incomingPred, betAmt, (success) => {
+                if (success) {
+                    st.tradesDone++;
+                }
+                st.isTrd = false;
+                isTargetAchieved();
+            });
+
+        } catch(err) {
             st.isTrd = false;
-            isExecutingCycle = false;
         }
+
         isFetchingApi = false;
     };
 
-    let lastRemSec = -1;
-    let cycleTriggered = false;
-
-    const timerMonitorTask = () => {
+    // =========================================================================
+    // TIMER MONITORING TICK (Updates countdown and triggers on 00:00)
+    // =========================================================================
+    const timerTick = () => {
         if (!st.isRun) return;
-        if (isTargetReached()) return;
+        if (isTargetAchieved()) return;
 
-        let remSec = getRemainingSeconds();
-        let epochSec = Math.floor(Date.now() / 1000) % 30;
-        let epochRem = (30 - epochSec) % 30;
+        const rem = updateTimer();
+        const currentCycle = Math.floor(Date.now() / 30000);
 
-        let isExpired = false;
-
-        if (remSec !== -1) {
-            if (remSec === 0) {
-                isExpired = true;
-            } else if (lastRemSec >= 0 && lastRemSec <= 3 && remSec >= 24) {
-                isExpired = true;
-            }
-
-            if (remSec > 4 && remSec < 26) {
-                cycleTriggered = false;
-            }
-
-            lastRemSec = remSec;
-        } else {
-            if (epochRem === 0 || (lastRemSec === 1 && epochRem === 0)) {
-                isExpired = true;
-            }
-            if (epochRem > 4 && epochRem < 26) {
-                cycleTriggered = false;
-            }
-            lastRemSec = epochRem;
-        }
-
-        if (isExpired && !cycleTriggered) {
-            cycleTriggered = true;
-            triggerAutomatedExecution();
+        if (rem === 0 && st.lastTriggeredCycle !== currentCycle) {
+            st.lastTriggeredCycle = currentCycle;
+            executeCycleTradeWorkflow();
         }
     };
 
-    let tradeLockTs = 0;
-    setInterval(() => {
-        if (st.isTrd || isExecutingCycle) {
-            if (!tradeLockTs) tradeLockTs = Date.now();
-            else if (Date.now() - tradeLockTs > 15000) {
-                st.isTrd = false;
-                isFetchingApi = false;
-                isExecutingCycle = false;
-                tradeLockTs = 0;
-            }
-        } else {
-            tradeLockTs = 0;
-        }
-    }, 3000);
+    updateTimer();
+    st.timerInt = setInterval(timerTick, 1000);
 
-    st.timerInt = setInterval(timerMonitorTask, 200);
-    st.autoInt = st.timerInt;
-    return "GHOST_TRADING_INITIATED_24_7";
+    return "MULTI_ENGINE_TIMER_TRIGGERED_EXECUTION_INITIATED";
 })();
 """
 
@@ -1224,6 +1213,7 @@ const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/
 # WORKER EXECUTION FLOWS
 # ==============================================================================
 def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, anim_msg_id):
+    # Stage 1: 20%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 20,
         "text": "Initializing dedicated browser container...",
@@ -1248,6 +1238,7 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         terminate_session_cleanly(sid)
         return
 
+    # Stage 2: 40%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 40,
         "text": "Navigating to platform portal & bypassing guards...",
@@ -1277,6 +1268,7 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         terminate_session_cleanly(sid)
         return
 
+    # Stage 3: 60%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 60,
         "text": "Submitting encrypted authentication credentials...",
@@ -1317,6 +1309,7 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         })
         return
 
+    # Stage 4: 80%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 80,
         "text": "Dismissing announcements & securing session token...",
@@ -1329,6 +1322,7 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
     safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
     time.sleep(0.8)
 
+    # Stage 5: 100%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 100,
         "text": "Authentication verified! Ready for trade setup.",
@@ -1642,7 +1636,13 @@ def worker_task_listener():
                         })
 
                 elif kind == "STOP_TRADING" and sid in active_sessions:
-                    safe_tab_execute(sid, lambda drv: drv.execute_script("if(window.__WINGO_ST){ window.__WINGO_ST.isRun = false; if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); if(window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt); }"))
+                    safe_tab_execute(sid, lambda drv: drv.execute_script("""
+                        if(window.__WINGO_ST){ 
+                            window.__WINGO_ST.isRun = false; 
+                            if(window.__WINGO_ST.autoInt) clearInterval(window.__WINGO_ST.autoInt); 
+                            if(window.__WINGO_ST.timerInt) clearInterval(window.__WINGO_ST.timerInt);
+                        }
+                    """))
                     active_sessions[sid]["is_trading"] = False
 
                 elif kind == "CANCEL_SESSION" and sid in active_sessions:
