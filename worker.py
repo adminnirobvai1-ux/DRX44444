@@ -76,7 +76,7 @@ def to_subscript_digits(val) -> str:
 # WORKER CONFIGURATION & CLUSTER REGISTRY
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
 # Support custom terminal numbering (e.g. python3 worker.py 1 -> W-01)
@@ -277,7 +277,6 @@ def terminate_session_cleanly(session_id):
     cleanup_zombie_browsers()
     gc.collect()
 
-    # Reset worker node status to FREE in Firebase
     firebase_sync_http(f"terminals/{NODE_ID}", "PATCH", {
         "status": "FREE",
         "assigned_user_id": None,
@@ -656,12 +655,12 @@ return 0.0;
 """
 
 # ==============================================================================
-# 9. INTEGRATED TIMER-BASED EXECUTION ENGINE (WITH GUARDRAILS & EXPIRATION TRIGGER)
+# 9. INTEGRATED TIMER-BASED EXECUTION ENGINE (WITH MULTI-SERVER CONSENSUS LOGIC)
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
 const autoTotalSteps = parseInt(arguments[1]) || 5;
-const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
+const targetApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
 
 (function(){
     let ghostContainer = document.getElementById('sys-core-fin');
@@ -748,7 +747,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         return st.curBal || 0;
     }
 
-    // Target Balance Pre-Check Guardrail (strictly halts trading & eliminates race conditions)
     function isTargetReached() {
         let liveBal = chkBal();
         if (st.tgtAmt > 0 && liveBal >= st.tgtAmt && st.startBal > 0) {
@@ -761,7 +759,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         return false;
     }
 
-    // WinGo 30s Countdown Inspector
     function getRemainingSeconds() {
         try {
             const timeSelectors = [
@@ -822,18 +819,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         return seq;
     };
 
-    const getNextLivePeriod = (str) => {
-        let chars = String(str).split('');
-        for (let i = chars.length - 1; i >= 0; i--) {
-            if (chars[i] !== '9') {
-                chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1);
-                return chars.join('');
-            }
-            chars[i] = '0';
-        }
-        return '1' + chars.join('');
-    };
-
     const drx_triggerEvent = (el, etype) => {
         let ev = new Event(etype, { bubbles: true, cancelable: true });
         el.dispatchEvent(ev);
@@ -851,23 +836,19 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         }
     };
 
-    // Robust, non-skipping trade executor
     const exeTrd = (pred, amt, cb) => {
         try {
-            // Guardrail Pre-Check before executing any DOM action
             if (isTargetReached()) {
                 if (cb) cb(false);
                 return;
             }
 
-            // Guard: Never place bet during locked last 5 seconds of round
             let remSec = getRemainingSeconds();
             if (remSec <= 5 && remSec > 0) {
                 if (cb) cb(false);
                 return;
             }
 
-            // Dismiss any lingering overlay first so buttons are 100% clickable
             let lingeringDialog = document.querySelector('.van-dialog, .announcement-box');
             if (lingeringDialog) {
                 let cBtn = lingeringDialog.querySelector('.van-dialog__confirm, button');
@@ -898,12 +879,10 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
             }
             drx_simClick(btn);
 
-            // Interval-based waiting for Vant UI modal & stepper input to fully mount
             let checkAttempts = 0;
             let valInterval = setInterval(() => {
                 checkAttempts++;
 
-                // Immediate abort if target reached while modal was opening
                 if (isTargetReached()) {
                     clearInterval(valInterval);
                     let closeBtn = document.querySelector('.van-popup__close-icon, .dialog-close, button.van-dialog__cancel');
@@ -925,7 +904,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
                         drx_triggerEvent(inpEl, 'blur');
                     }
                     setTimeout(() => {
-                        // Strict check before final confirm click
                         if (isTargetReached()) {
                             let closeBtn = document.querySelector('.van-popup__close-icon, .dialog-close, button.van-dialog__cancel');
                             if (closeBtn) try { closeBtn.click(); } catch(e){}
@@ -970,9 +948,8 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
     let isFetchingApi = false;
     let isExecutingCycle = false;
 
-    // Automated Prediction Fetch & Immediate Execution Workflow
+    // Automated Prediction Fetch & Multi-Server Consensus Resolution
     const triggerAutomatedExecution = async () => {
-        // Guardrail 1: Target Balance Pre-Check
         if (isTargetReached()) return;
         if (!st.isRun || st.isTrd || isFetchingApi || isExecutingCycle) return;
 
@@ -980,173 +957,198 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         isFetchingApi = true;
 
         try {
-            // Guardrail 2: Verify balance before dispatching prediction API call
             if (isTargetReached()) {
                 isFetchingApi = false;
                 isExecutingCycle = false;
                 return;
             }
 
-            let ts = Math.floor(Date.now() / 1000);
-            let sep = targetApiUrl.includes('?') ? '&' : '?';
-            let fetchUrl = targetApiUrl + sep + "page=1&ts=" + ts;
-            let dataArray = null;
-
-            try {
-                let res = await fetch(fetchUrl);
-                if (res.ok) {
-                    dataArray = await res.json();
-                }
-            } catch(fetchErr) {
-                // Secondary fallback attempt if primary endpoint has momentary network error
+            const fetchApiPayload = async (url) => {
+                const ctrl = new AbortController();
+                const tid = setTimeout(() => ctrl.abort(), 4500);
                 try {
-                    let fallbackUrl = "https://data-vip-247-hack.ai.studio/apipid.json?page=1&ts=" + ts;
-                    let res2 = await fetch(fallbackUrl);
-                    if (res2.ok) dataArray = await res2.json();
-                } catch(e2){}
+                    const sep = url.includes('?') ? '&' : '?';
+                    const res = await fetch(`${url}${sep}_t=${Date.now()}`, { signal: ctrl.signal });
+                    clearTimeout(tid);
+                    if (!res.ok) return null;
+                    return await res.json();
+                } catch(err) {
+                    clearTimeout(tid);
+                    return null;
+                }
+            };
+
+            let payload = await fetchApiPayload(targetApiUrl);
+            if (!payload) {
+                payload = await fetchApiPayload("https://drx-tm-vip-hack-code6.edgeone.dev/pid.json");
             }
 
-            // Guardrail 3: Verify target balance immediately post-API response
             if (isTargetReached()) {
                 isFetchingApi = false;
                 isExecutingCycle = false;
                 return;
             }
 
-            if (dataArray) {
-                let activeLogic = Array.isArray(dataArray) ? dataArray[0] : (dataArray.data ? dataArray.data[0] : dataArray);
-                if (activeLogic) {
-                    let tempHist = activeLogic.history || (activeLogic.data && activeLogic.data.history) || [];
-                    let cSig = '';
-                    if (tempHist[0] && (tempHist[0].pid || tempHist[0].period)) {
-                        cSig = getNextLivePeriod(String(tempHist[0].pid || tempHist[0].period));
-                    }
-                    if (!cSig && activeLogic.next && (activeLogic.next.period || activeLogic.next.pid)) {
-                        cSig = String(activeLogic.next.period || activeLogic.next.pid);
-                    }
-                    if (!cSig && activeLogic.period) {
-                        cSig = String(activeLogic.period);
-                    }
-                    let sSig = sessionStorage.getItem('drx_sig');
+            if (payload && payload.period && Array.isArray(payload.servers) && payload.servers.length > 0) {
+                const currentPeriod = String(payload.period).trim();
+                const sessionSig = sessionStorage.getItem('drx_sig');
 
-                    if (cSig && cSig !== sSig) {
-                        // A. Evaluate Previous Round Result
-                        if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
-                            let actualData = tempHist[0];
-                            let actualR = '';
-                            if (actualData) {
-                                if (actualData.actual_size) {
-                                    actualR = String(actualData.actual_size).toUpperCase().trim();
-                                } else if (actualData.actual === 'BIG' || actualData.actual === 1 || (typeof actualData.actual === 'number' && actualData.actual >= 5)) {
-                                    actualR = 'BIG';
-                                } else if (actualData.actual === 'SMALL' || actualData.actual === 0 || (typeof actualData.actual === 'number' && actualData.actual < 5)) {
-                                    actualR = 'SMALL';
-                                }
-                            }
-                            let won = false;
-                            if (actualR) {
-                                won = (st.lastPred === actualR);
-                            } else {
-                                let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
-                                if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
-                                    won = true;
-                                }
-                            }
-
-                            if (won) {
-                                st.w++;
-                                st.cur_w_streak++;
-                                st.cur_l_streak = 0;
-                                if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                                st.stpIdx = 0;
-                            } else {
-                                st.l++;
-                                st.cur_l_streak++;
-                                st.cur_w_streak = 0;
-                                if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
-
-                                // Max Step Failure (Circuit Breaker)
-                                if (st.stpIdx >= st.steps - 1) {
-                                    st.circuitBreakerTriggered = true;
-                                    st.isRun = false;
-                                    st.isTrd = false;
-                                    if (st.autoInt) clearInterval(st.autoInt);
-                                    if (st.timerInt) clearInterval(st.timerInt);
-                                    isFetchingApi = false;
-                                    isExecutingCycle = false;
-                                    return;
-                                } else {
-                                    st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
-                                }
-                            }
+                if (currentPeriod && currentPeriod !== sessionSig) {
+                    // Evaluate Previous Round Result
+                    if (st.lastPred && st.lastPred !== 'SKIP' && st.lastPeriod) {
+                        let actualR = '';
+                        if (payload.last_period && payload.last_period.size) {
+                            actualR = String(payload.last_period.size).toUpperCase().trim();
                         }
 
-                        st.lastPred = null;
-                        st.lastPeriod = cSig;
-                        st.isTrd = true;
-
-                        // Guardrail 4: Verify target balance before staking
-                        let nBal = chkBal();
-                        if (isTargetReached()) {
-                            st.isTrd = false;
-                            isFetchingApi = false;
-                            isExecutingCycle = false;
-                            return;
-                        }
-
-                        st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
-                        if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
-                        let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
-
-                        if (nBal > 0 && nBal < tAmt) {
-                            st.stpIdx = 0;
-                            st.isTrd = false;
-                            isFetchingApi = false;
-                            isExecutingCycle = false;
-                            return;
-                        }
-
-                        let rawPred = activeLogic.pred || activeLogic.prediction || (activeLogic.next && (activeLogic.next.size || activeLogic.next.pred)) || 'BIG';
-                        let prediction = String(rawPred).toUpperCase().trim();
-
-                        if (prediction === 'SKIP') {
-                            st.lastPred = null;
-                            sessionStorage.setItem('drx_sig', cSig);
-                            setTimeout(() => { 
-                                st.isTrd = false; 
-                                isExecutingCycle = false;
-                            }, 1000);
+                        let won = false;
+                        if (actualR) {
+                            won = (st.lastPred === actualR);
                         } else {
-                            if (!['BIG', 'SMALL'].includes(prediction)) {
-                                prediction = (st.tradesDone % 2 === 0) ? 'BIG' : 'SMALL';
+                            let prevRecordedBal = parseFloat(sessionStorage.getItem('drx_p_bal') || '0');
+                            if (prevRecordedBal > 0 && st.curBal > prevRecordedBal) {
+                                won = true;
                             }
-                            st.lastPred = prediction;
+                        }
 
-                            // Guardrail 5: Final pre-trade check strictly prior to DOM dispatch
-                            if (isTargetReached()) {
+                        if (won) {
+                            st.w++;
+                            st.cur_w_streak++;
+                            st.cur_l_streak = 0;
+                            if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                            st.stpIdx = 0;
+                        } else {
+                            st.l++;
+                            st.cur_l_streak++;
+                            st.cur_w_streak = 0;
+                            if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+
+                            if (st.stpIdx >= st.steps - 1) {
+                                st.circuitBreakerTriggered = true;
+                                st.isRun = false;
                                 st.isTrd = false;
+                                if (st.autoInt) clearInterval(st.autoInt);
+                                if (st.timerInt) clearInterval(st.timerInt);
                                 isFetchingApi = false;
                                 isExecutingCycle = false;
                                 return;
+                            } else {
+                                st.stpIdx = Math.min(st.stpIdx + 1, st.dynSeq.length - 1);
                             }
-
-                            // Immediate automated execution on received prediction data
-                            exeTrd(prediction, tAmt, (suc) => {
-                                if (suc) {
-                                    sessionStorage.setItem('drx_sig', cSig);
-                                    sessionStorage.setItem('drx_p_bal', String(st.curBal));
-                                    st.tradesDone++;
-                                } else {
-                                    st.lastPred = null;
-                                }
-                                setTimeout(() => { 
-                                    st.isTrd = false; 
-                                    isExecutingCycle = false;
-                                    isTargetReached();
-                                }, 1000);
-                            });
                         }
                     }
+
+                    // Multi-Server Win Rate & Consensus Resolution Algorithm
+                    const parsePercent = (val) => {
+                        if (typeof val === 'number') return val;
+                        if (typeof val === 'string') {
+                            let clean = parseFloat(val.replace('%', '').trim());
+                            return isNaN(clean) ? 0 : clean;
+                        }
+                        return 0;
+                    };
+
+                    const parsedServers = payload.servers
+                        .map(s => {
+                            let p = (s.prediction || '').toString().trim().toUpperCase();
+                            return {
+                                server: s.server || '',
+                                name: s.name || '',
+                                prediction: (p === 'BIG' || p === 'SMALL') ? p : null,
+                                winRate: parsePercent(s.win_rate)
+                            };
+                        })
+                        .filter(s => s.prediction !== null);
+
+                    if (parsedServers.length === 0) {
+                        st.isTrd = false;
+                        isFetchingApi = false;
+                        isExecutingCycle = false;
+                        return;
+                    }
+
+                    // 1. Identify Maximum Win Rate
+                    let maxRate = -1;
+                    for (let s of parsedServers) {
+                        if (s.winRate > maxRate) maxRate = s.winRate;
+                    }
+
+                    // 2. Filter tied top-performing servers
+                    const topServers = parsedServers.filter(s => s.winRate === maxRate);
+                    const count = topServers.length;
+                    const bigCount = topServers.filter(s => s.prediction === 'BIG').length;
+                    const smallCount = topServers.filter(s => s.prediction === 'SMALL').length;
+
+                    let decidedPrediction = null;
+
+                    // 3. Apply Decision Consensus Matrix
+                    if (count === 1) {
+                        // Single dominant server takes trade
+                        decidedPrediction = topServers[0].prediction;
+                    } else if (count === 2) {
+                        // 2 tied servers: Must agree 100%, else skip
+                        if (bigCount === 2) decidedPrediction = 'BIG';
+                        else if (smallCount === 2) decidedPrediction = 'SMALL';
+                    } else if (count === 3) {
+                        // 3 tied servers: Unanimous or 2 vs 1 majority rule
+                        if (bigCount >= 2) decidedPrediction = 'BIG';
+                        else if (smallCount >= 2) decidedPrediction = 'SMALL';
+                    } else if (count >= 4) {
+                        // 4+ tied servers: Must be 100% unanimous agreement, else skip
+                        if (bigCount === count) decidedPrediction = 'BIG';
+                        else if (smallCount === count) decidedPrediction = 'SMALL';
+                    }
+
+                    // If tie resulted in conflict or skip decision
+                    if (!decidedPrediction) {
+                        st.lastPred = null;
+                        sessionStorage.setItem('drx_sig', currentPeriod);
+                        setTimeout(() => {
+                            st.isTrd = false;
+                            isExecutingCycle = false;
+                        }, 1000);
+                        return;
+                    }
+
+                    // Execute trade with consensus choice
+                    st.lastPred = decidedPrediction;
+                    st.lastPeriod = currentPeriod;
+                    st.isTrd = true;
+
+                    let nBal = chkBal();
+                    if (isTargetReached()) {
+                        st.isTrd = false;
+                        isFetchingApi = false;
+                        isExecutingCycle = false;
+                        return;
+                    }
+
+                    st.dynSeq = calcSeq(nBal > 0 ? nBal : st.tgtAmt, st.steps);
+                    if (st.stpIdx >= st.dynSeq.length) st.stpIdx = st.dynSeq.length - 1;
+                    let tAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
+
+                    if (nBal > 0 && nBal < tAmt) {
+                        st.stpIdx = 0;
+                        st.isTrd = false;
+                        isFetchingApi = false;
+                        isExecutingCycle = false;
+                        return;
+                    }
+
+                    exeTrd(decidedPrediction, tAmt, (suc) => {
+                        if (suc) {
+                            sessionStorage.setItem('drx_sig', currentPeriod);
+                            sessionStorage.setItem('drx_p_bal', String(st.curBal));
+                            st.tradesDone++;
+                        } else {
+                            st.lastPred = null;
+                        }
+                        setTimeout(() => {
+                            st.isTrd = false;
+                            isExecutingCycle = false;
+                            isTargetReached();
+                        }, 1000);
+                    });
                 }
             }
         } catch(e) {
@@ -1156,7 +1158,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         isFetchingApi = false;
     };
 
-    // Close Countdown Timer Monitoring & Zero-Expiration Trigger
     let lastRemSec = -1;
     let cycleTriggered = false;
 
@@ -1171,23 +1172,18 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         let isExpired = false;
 
         if (remSec !== -1) {
-            // Hit zero directly
             if (remSec === 0) {
                 isExpired = true;
-            }
-            // Transition wrap-around: was near end (<= 3s) and wrapped back to high (>= 24s)
-            else if (lastRemSec >= 0 && lastRemSec <= 3 && remSec >= 24) {
+            } else if (lastRemSec >= 0 && lastRemSec <= 3 && remSec >= 24) {
                 isExpired = true;
             }
 
-            // Reset/re-arm timer trigger for next cycle when safely mid-round (4s to 26s)
             if (remSec > 4 && remSec < 26) {
                 cycleTriggered = false;
             }
 
             lastRemSec = remSec;
         } else {
-            // High-precision epoch 30-second boundary fallback
             if (epochRem === 0 || (lastRemSec === 1 && epochRem === 0)) {
                 isExpired = true;
             }
@@ -1197,14 +1193,12 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
             lastRemSec = epochRem;
         }
 
-        // Trigger automated workflow immediately at the exact expiration moment
         if (isExpired && !cycleTriggered) {
             cycleTriggered = true;
             triggerAutomatedExecution();
         }
     };
 
-    // 15-second trade-lock watchdog (prevents st.isTrd or isExecutingCycle from staying stuck)
     let tradeLockTs = 0;
     setInterval(() => {
         if (st.isTrd || isExecutingCycle) {
@@ -1220,7 +1214,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
         }
     }, 3000);
 
-    // High-frequency 200ms timer monitoring interval
     st.timerInt = setInterval(timerMonitorTask, 200);
     st.autoInt = st.timerInt;
     return "GHOST_TRADING_INITIATED_24_7";
@@ -1231,7 +1224,6 @@ const targetApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0g
 # WORKER EXECUTION FLOWS
 # ==============================================================================
 def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, anim_msg_id):
-    # Stage 1: 20%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 20,
         "text": "Initializing dedicated browser container...",
@@ -1256,7 +1248,6 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         terminate_session_cleanly(sid)
         return
 
-    # Stage 2: 40%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 40,
         "text": "Navigating to platform portal & bypassing guards...",
@@ -1286,7 +1277,6 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         terminate_session_cleanly(sid)
         return
 
-    # Stage 3: 60%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 60,
         "text": "Submitting encrypted authentication credentials...",
@@ -1327,7 +1317,6 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
         })
         return
 
-    # Stage 4: 80%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 80,
         "text": "Dismissing announcements & securing session token...",
@@ -1340,7 +1329,6 @@ def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, an
     safe_tab_execute(sid, lambda drv: drv.execute_script(MODAL_AUTO_DISMISSER_JS))
     time.sleep(0.8)
 
-    # Stage 5: 100%
     emit_event_to_manager("PROGRESS_STAGE", {
         "percent": 100,
         "text": "Authentication verified! Ready for trade setup.",
@@ -1457,7 +1445,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            # Max Step Failure Circuit Breaker check
             if circuit_breaker:
                 sess["is_trading"] = False
                 emit_event_to_manager("CIRCUIT_BREAKER_TRIGGERED", {
@@ -1474,7 +1461,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 terminate_session_cleanly(sid)
                 break
 
-            # Check if target balance is genuinely reached
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
@@ -1489,7 +1475,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     "wins": sess["wins"],
                     "losses": sess["losses"]
                 })
-                # Immediately teardown browser and free worker slot
                 terminate_session_cleanly(sid)
                 break
             elif not is_run:
@@ -1731,7 +1716,6 @@ def handle_shutdown_signals(sig, frame):
     logger.info(f"Shutdown signal caught on {WORKER_ALIAS}. Commencing clean cluster teardown...")
     WORKER_ACTIVE = False
     try:
-        # Immediately delete self from Firebase so no offline ghost is left behind
         firebase_sync_http(f"terminals/{NODE_ID}", "DELETE")
     except Exception:
         pass
