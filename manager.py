@@ -11,6 +11,7 @@
 # - Precision balance formatting (decimals/paisa preserved in balance, zero-paisa bets)
 # ==============================================================================
 
+from __future__ import annotations
 import os
 import sys
 import subprocess
@@ -117,7 +118,7 @@ SUPER_ADMIN_ID = int(os.environ.get("SUPER_ADMIN_ID", 8707571669))
 OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@MD_NAYEEM_DRX_TM")
 
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json")
 NODE_ID = f"mgr_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
 SPINNER_FRAMES = ["◴", "◷", "◶", "◵"]
@@ -396,7 +397,6 @@ def find_best_worker():
         candidates.sort(key=lambda x: (x[2], x[1]))
         return candidates[0][0]
 
-    # Fallback to any online node
     if all_terminals and isinstance(all_terminals, dict):
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict):
@@ -420,7 +420,7 @@ def relay_action_to_worker(worker_id, action_payload):
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
 # ==============================================================================
 def worker_events_listener():
-    """Listens for event responses from Workers (e.g. login results, wingo ready, win target reached)."""
+    """Listens for event responses from Workers."""
     while True:
         try:
             events = firebase_sync_http("manager_events", "GET")
@@ -699,7 +699,7 @@ def handle_pass_command(message):
 # ==============================================================================
 # ADMIN COMMANDS: WORKER FLEET MANAGEMENT (/data & /device)
 # ==============================================================================
-def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, int]:
+def render_fleet_keyboard(terminals: dict):
     markup = InlineKeyboardMarkup(row_width=1)
     now_ts = time.time()
 
@@ -710,7 +710,6 @@ def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, i
                 hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
                 st = tinfo.get("status", "FREE")
 
-                # Auto-prune stale/dead ghost nodes older than 25 seconds from Firebase
                 if hb_diff > 25 or st == "OFFLINE":
                     threading.Thread(
                         target=firebase_sync_http,
@@ -720,7 +719,6 @@ def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, i
                 else:
                     active_terminals[tid] = tinfo
 
-    # Sort terminals by alias or ID for clean consistent ordering (W-01, W-02, ...)
     sorted_items = sorted(
         active_terminals.items(),
         key=lambda x: str(x[1].get("alias", x[0]))
@@ -745,11 +743,9 @@ def render_fleet_keyboard(terminals: dict) -> tuple[InlineKeyboardMarkup, int, i
             InlineKeyboardButton(f"⚠️ {to_vip_text('NO ACTIVE WORKERS ONLINE')}", callback_data="adm_fleet")
         )
 
-    # Global Emergency Stop & Clean Fleet
     markup.add(
         InlineKeyboardButton(f"✦︎ {to_vip_text('FREE ALL / PURGE GHOSTS')} ✦︎", callback_data="adm_free_all")
     )
-    # Refresh Fleet
     markup.add(
         InlineKeyboardButton(f"֎ {to_vip_text('REFRESH FLEET')} ֎", callback_data="adm_fleet")
     )
@@ -906,7 +902,6 @@ def handle_callbacks(call):
         status_raw = tinfo.get("status", "UNKNOWN")
         is_alive = (hb_diff <= 25 and status_raw != "OFFLINE")
 
-        # Query session details
         assigned_user = tinfo.get("assigned_user_id", "None")
         sess_id = tinfo.get("session_id", "None")
 
@@ -918,7 +913,6 @@ def handle_callbacks(call):
         masked_ph = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
         platform = sess_detail.get("site_name", "Amar Club")
 
-        # Fetch live stats for this session
         task_data = {}
         if assigned_user and sess_id and assigned_user != "None":
             task_data = firebase_sync_http(f"user_tasks/{assigned_user}/{sess_id}", "GET") or {}
@@ -965,16 +959,13 @@ def handle_callbacks(call):
     elif action == "adm_kill_w":
         if chat_id != SUPER_ADMIN_ID: return
         target_tid = sid
-        # Broadcast emergency stop to this specific worker
         relay_action_to_worker(target_tid, {
             "kind": "EMERGENCY_STOP",
             "worker_id": target_tid
         })
-        # Delete or reset in Firebase
         firebase_sync_http(f"terminals/{target_tid}", "DELETE")
 
         bot.answer_callback_query(call.id, f"Worker {target_tid} stopped and slot freed!", show_alert=True)
-        # Return to fleet overview
         terms = firebase_sync_http("terminals", "GET") or {}
         markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
         bot.edit_message_text(
@@ -1183,8 +1174,6 @@ def handle_callbacks(call):
         assigned_worker = sess.get("assigned_worker")
         cur_b = sess.get("current_balance", 0.0)
 
-        # STRICT TARGET RULE:
-        # If user defined target 500, target goal is 500. Do not sum start balance + target.
         target_goal = sess["target_profit"]
         if target_goal <= cur_b:
             target_goal = cur_b + target_goal
@@ -1239,7 +1228,6 @@ def handle_callbacks(call):
     elif action == "bal" and sid in active_sessions:
         sess = active_sessions[sid]
         cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
-        # Instant non-blocking response from active cache so auto-trading NEVER pauses!
         if cur_b and cur_b > 0:
             bot.answer_callback_query(call.id, f"Live Balance: {format_bdt_balance(cur_b)}", show_alert=True)
         else:
@@ -1291,7 +1279,6 @@ def handle_callbacks(call):
             bot.send_message(chat_id, stop_caption)
 
     elif action == "cancel":
-        # Guaranteed instant cancellation
         target_sid = sid or user_sessions.get(chat_id, {}).get("active_sid")
         if target_sid and target_sid in active_sessions:
             assigned_worker = active_sessions[target_sid].get("assigned_worker")
@@ -1537,4 +1524,3 @@ if __name__ == "__main__":
     except Exception:
         pass
     bot.infinity_polling(skip_pending=True)
-
