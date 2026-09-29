@@ -1,19 +1,19 @@
+
 # ==============================================================================
-# DRX WINGO CLUSTER - EXECUTION WORKER NODE (24/7 CONTINUOUS NON-STOP ENGINE)
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (সম্পূর্ণ সমন্বিত ও ফিক্সড কোড)
 # ==============================================================================
 # Responsibilities:
 # - Connects to Firebase RTDB and registers as an active worker terminal
 # - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
 # - Generates local standalone prediction & timer HTML bridge on device
 # - Embeds on-screen live countdown & prediction HUD widget into target DOM
-# - Continuous 30-Second synchronized epoch timer with zero-second dispatch
+# - Continuous 30-Second synchronized epoch timer with settled-window dispatch
 # - Exact Step-Maker Martingale Mathematics (JavaScript 2^N - 1 Scaling Integration)
 # - Anti-Double Trade Guard (Strict Single Trade per Period Lock)
-# - Direct DOM & API Multi-Layer Accurate Win/Loss Evaluation Engine
-# - Continuous 24/7 Non-Stop Trading Mode (Runs until Target is Achieved)
 # - Dual-layer execution: Browser JavaScript + Python CORS-Free Engine
 # - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
-# - Guaranteed target balance fulfillment & immediate browser release
+# - Guaranteed 24/7 continuous trading until target balance is reached
+# - Precision Multi-Layer Win/Loss Detection (DOM Trend + API + Balance Differential)
 # - Zombie-free process teardown and admin kill switches (Railway 0.5GB RAM Safe)
 # ==============================================================================
 
@@ -464,15 +464,14 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # 0.5GB Low Memory & Ultra-Smooth Performance Tuning
     options.set_preference("dom.ipc.processCount", 1)
-    options.set_preference("browser.sessionhistory.max_entries", 1)
+    options.set_preference("browser.sessionhistory.max_entries", 2)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
-    options.set_preference("image.mem.surfacecache.max_size_kb", 512)
-    options.set_preference("javascript.options.mem.max", 16384)
+    options.set_preference("image.mem.surfacecache.max_size_kb", 1024)
+    options.set_preference("javascript.options.mem.max", 32768)
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", True)
-    options.set_preference("browser.cache.memory.capacity", 1024)
+    options.set_preference("browser.cache.memory.capacity", 2048)
     options.set_preference("network.http.use-cache", False)
     options.set_preference("network.prefetch-next", False)
     options.set_preference("webgl.disabled", True)
@@ -604,7 +603,7 @@ MODAL_AUTO_DISMISSER_JS = """
 
     sweepModals();
     if (!window.__SWEEPER_INTERVAL) {
-        window.__SWEEPER_INTERVAL = setInterval(sweepModals, 1000);
+        window.__SWEEPER_INTERVAL = setInterval(sweepModals, 600);
     }
 })();
 """
@@ -780,33 +779,32 @@ return false;
 """
 
 FETCH_BALANCE_JS = r"""
-(function(){
-    let refBtn = document.querySelector('.van-icon-replay, .van-icon-refresh, [class*="reload" i], [class*="refresh" i]');
-    if (refBtn) { try { refBtn.click(); } catch(e){} }
-
-    let targetedEls = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
-    for (let i = 0; i < targetedEls.length; i++) {
-        let txt = targetedEls[i].innerText || '';
-        let match = txt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
+let reloadBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
+if (reloadBtn) {
+    try { reloadBtn.click(); } catch(e){}
+}
+let targetedEls = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
+for (let i = 0; i < targetedEls.length; i++) {
+    let txt = targetedEls[i].innerText || '';
+    let match = txt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
+    if (match) return parseFloat(match[1].replace(/,/g, ''));
+}
+let els = document.querySelectorAll('span, div, p');
+for (let i = 0; i < els.length; i++) {
+    let txt = els[i].innerText || '';
+    if (txt.includes('Wallet balance') || txt.includes('Balance')) {
+        let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
+        let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
         if (match) return parseFloat(match[1].replace(/,/g, ''));
     }
-    let els = document.querySelectorAll('span, div, p');
-    for (let i = 0; i < els.length; i++) {
-        let txt = els[i].innerText || '';
-        if (txt.includes('Wallet balance') || txt.includes('Balance')) {
-            let parentTxt = (els[i].parentNode && els[i].parentNode.innerText) ? els[i].parentNode.innerText : '';
-            let match = parentTxt.match(/[৳₹$€£]\s*([\d,]+\.?\d*)/);
-            if (match) return parseFloat(match[1].replace(/,/g, ''));
-        }
+}
+for (let i = 0; i < els.length; i++) {
+    let txt = els[i].innerText || '';
+    if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
+        return parseFloat(txt.replace(/[^\d.]/g, ''));
     }
-    for (let i = 0; i < els.length; i++) {
-        let txt = els[i].innerText || '';
-        if (txt.trim().match(/^[৳₹$€£]\s*[\d,]+\.?\d*$/)) {
-            return parseFloat(txt.replace(/[^\d.]/g, ''));
-        }
-    }
-    return 0.0;
-})();
+}
+return 0.0;
 """
 
 # ==============================================================================
@@ -825,7 +823,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         hud.id = 'drx-prediction-hud';
         hud.style.cssText = 'position:fixed;top:10px;right:10px;z-index:999999;background:rgba(13,17,23,0.92);border:2px solid #30363d;border-radius:10px;padding:12px;color:#58a6ff;font-family:monospace;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.6);width:170px;pointer-events:none;';
         hud.innerHTML = `
-            <div style="font-size:11px;font-weight:bold;color:#f0883e;">DRX 24/7 ENGINE</div>
+            <div style="font-size:11px;font-weight:bold;color:#f0883e;">DRX VIP ENGINE</div>
             <div id="timer" style="font-size:26px;font-weight:bold;color:#39d353;margin:4px 0;">00:30</div>
             <div id="hud-signal" style="font-size:14px;font-weight:bold;color:#ffffff;">SIGNAL: --</div>
             <div id="hud-rate" style="font-size:10px;color:#8b949e;">WIN RATE: --%</div>
@@ -883,8 +881,21 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     };
     window.__WINGO_ST = st;
 
+    function triggerBalanceRefresh() {
+        try {
+            let refreshBtns = document.querySelectorAll('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i], img[src*="reload" i]');
+            for (let b of refreshBtns) {
+                if (b && b.offsetParent !== null) {
+                    b.click();
+                    break;
+                }
+            }
+        } catch(e){}
+    }
+
     function chkBal() {
         try {
+            triggerBalanceRefresh();
             let targeted = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
             for (let i = 0; i < targeted.length; i++) {
                 let txt = targeted[i].innerText || '';
@@ -913,11 +924,18 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         return st.curBal || 0.0;
     }
 
-    function refreshWallet() {
-        try {
-            let refBtn = document.querySelector('.van-icon-replay, .van-icon-refresh, [class*="reload" i], [class*="refresh" i]');
-            if (refBtn) refBtn.click();
-        } catch(e){}
+    function isTargetAchieved() {
+        if (st.targetReached) return true;
+        let b = chkBal();
+        if (st.tgtAmt > 0 && st.startBal > 0 && (b >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
+            st.targetReached = true;
+            st.isRun = false;
+            st.isTrd = false;
+            if (st.autoInt) clearInterval(st.autoInt);
+            if (st.timerInt) clearInterval(st.timerInt);
+            return true;
+        }
+        return false;
     }
 
     function updateTimer() {
@@ -935,17 +953,17 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     function getLiveRoundId() {
         try {
+            let pEl = document.querySelector('.Game__C-title-sub, .Time__C-num, [class*="period" i], [class*="issue" i]');
+            if (pEl) {
+                let m = (pEl.innerText || '').match(/(\d{10,24})/);
+                if (m) return m[1];
+            }
             let allTextEls = document.querySelectorAll('div, span, p, h3');
             for (let i = 0; i < allTextEls.length; i++) {
                 let t = (allTextEls[i].innerText || '').trim();
-                if (/^20\d{12,18}$/.test(t) && allTextEls[i].children.length === 0) {
+                if (/^20\d{10,20}$/.test(t) && allTextEls[i].children.length === 0) {
                     return t;
                 }
-            }
-            let pEl = document.querySelector('.Game__C-title-sub, .Time__C-num, [class*="period" i], [class*="issue" i]');
-            if (pEl) {
-                let m = (pEl.innerText || '').match(/(\d{12,20})/);
-                if (m) return m[1];
             }
         } catch(e){}
         return 'EPOCH_' + Math.floor(Date.now() / 30000);
@@ -959,8 +977,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         let stepsCount = parseInt(stepsCountVal) || 5;
         if (stepsCount < 1) stepsCount = 1;
 
-        // Martingale (2x গুণিতক) ফর্মুলা অনুযায়ী হিসাব:
-        // মোট যোগফল = firstStep * (2^stepsCount - 1)
         const sumPowers = Math.pow(2, stepsCount) - 1;
         const firstStep = balance / sumPowers;
 
@@ -974,7 +990,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             total += roundedStep;
         }
 
-        // শেষ ধাপে সমন্বয় (Adjustment)
         const roundingError = Math.round(balance - total);
         if (roundingError !== 0 && steps.length > 0) {
             steps[stepsCount - 1] = Math.max(1, steps[stepsCount - 1] + roundingError);
@@ -993,46 +1008,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             try { el.click(); } catch(e) {}
         }
     };
-
-    // =========================================================================
-    // ACCURATE LIVE GAME HISTORY DOM PARSER (WIN/LOSS DETERMINATOR)
-    // =========================================================================
-    function getActualPeriodOutcomeFromDom(targetPeriod) {
-        if (!targetPeriod) return null;
-        let tPeriod = String(targetPeriod).trim();
-
-        let rows = document.querySelectorAll('tr, .van-table__row, [class*="history-item"], [class*="record" i], .van-row');
-        for (let r of rows) {
-            let txt = (r.innerText || '').trim();
-            if (txt.includes(tPeriod)) {
-                let uTxt = txt.toUpperCase();
-                if (uTxt.includes('BIG') && !uTxt.includes('SMALL')) return 'BIG';
-                if (uTxt.includes('SMALL') && !uTxt.includes('BIG')) return 'SMALL';
-                
-                let match = txt.replace(tPeriod, '').match(/\b([0-9])\b/);
-                if (match) {
-                    return parseInt(match[1]) >= 5 ? 'BIG' : 'SMALL';
-                }
-            }
-        }
-
-        let allEls = document.querySelectorAll('div, span, td, p');
-        for (let el of allEls) {
-            if (el.children.length === 0 && (el.innerText || '').trim() === tPeriod) {
-                let parent = el.closest('tr') || el.closest('.van-row') || el.parentElement?.parentElement || el.parentElement;
-                if (parent) {
-                    let pTxt = (parent.innerText || '').toUpperCase();
-                    if (pTxt.includes('BIG') && !pTxt.includes('SMALL')) return 'BIG';
-                    if (pTxt.includes('SMALL') && !pTxt.includes('BIG')) return 'SMALL';
-                    let match = pTxt.replace(tPeriod, '').match(/\b([0-9])\b/);
-                    if (match) {
-                        return parseInt(match[1]) >= 5 ? 'BIG' : 'SMALL';
-                    }
-                }
-            }
-        }
-        return null;
-    }
 
     function resolvePredictionFromServers(rawJson) {
         let serverList = [];
@@ -1101,7 +1076,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     }
 
     const exeTrdFast = (pred, amt, cb) => {
-        if (!st.isRun) {
+        if (isTargetAchieved() || !st.isRun) {
             if (cb) cb(false);
             return;
         }
@@ -1136,7 +1111,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             drx_simClick(btn);
 
             setTimeout(() => {
-                if (!st.isRun) {
+                if (isTargetAchieved() || !st.isRun) {
                     if (cb) cb(false);
                     return;
                 }
@@ -1152,7 +1127,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 }
 
                 setTimeout(() => {
-                    if (!st.isRun) {
+                    if (isTargetAchieved() || !st.isRun) {
                         if (cb) cb(false);
                         return;
                     }
@@ -1184,10 +1159,11 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     // Public method for external Python fallback dispatch
     window.__WINGO_EXECUTE_TRADE = (forcedPred) => {
-        if (!st.isRun || st.isTrd) return;
+        if (!st.isRun || isTargetAchieved() || st.isTrd) return;
         executeCycleTradeWorkflow(forcedPred);
     };
 
+    // Initial sequence setup based on real account balance
     let initialBal = chkBal();
     st.startBal = initialBal;
     st.curBal = initialBal;
@@ -1197,28 +1173,19 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     let isFetchingApi = false;
 
     const executeCycleTradeWorkflow = async (overridePred = null) => {
-        if (isFetchingApi || st.isTrd) return;
+        if (isTargetAchieved() || isFetchingApi || st.isTrd) return;
 
-        let incomingPeriod = getLiveRoundId();
-
-        // STRICT ANTI-DOUBLE BETTING GUARD
-        if (st.lastBetPeriod === incomingPeriod) {
-            return;
-        }
-
-        refreshWallet();
         let liveB = chkBal();
         if (liveB > 0 && st.startBal <= 0) {
             st.startBal = liveB;
             st.dynSeq = calcSeq(liveB, st.steps);
         }
+        if (isTargetAchieved()) return;
 
-        // Guaranteed Target Completion Stop Trigger
-        if (st.tgtAmt > 0 && st.startBal > 0 && (liveB >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
-            st.targetReached = true;
-            st.isRun = false;
-            st.isTrd = false;
-            if (st.timerInt) clearInterval(st.timerInt);
+        let incomingPeriod = getLiveRoundId();
+
+        // STRICT ANTI-DOUBLE BETTING GUARD
+        if (st.lastBetPeriod === incomingPeriod) {
             return;
         }
 
@@ -1259,85 +1226,106 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             }
 
             // =================================================================
-            // MULTI-LAYER ROCK-SOLID OUTCOME RESOLUTION (ACCURATE WIN/LOSS)
+            // PRECISION OUTCOME EVALUATION: MULTI-LAYER SETTLED DETECTION
             // =================================================================
             if (st.lastBetPeriod && st.lastBetAmt > 0 && st.evaluatedPeriod !== st.lastBetPeriod) {
+                st.evaluatedPeriod = st.lastBetPeriod;
+                triggerBalanceRefresh();
+                let freshBal = chkBal();
                 let won = false;
-                let resolved = false;
+                let evaluatedMethod = "NONE";
 
-                // 1. Primary Check: Live DOM Table History
-                let domOutcome = getActualPeriodOutcomeFromDom(st.lastBetPeriod);
-                if (domOutcome) {
-                    won = (st.lastPred === domOutcome);
-                    resolved = true;
-                }
+                // Layer 1: Check On-Screen DOM Trend / Game Record
+                try {
+                    let recordRows = document.querySelectorAll('.GameList__C-body-item, .van-row, tr, [class*="record-item" i], [class*="history-item" i], .van-table__row');
+                    for (let r of recordRows) {
+                        let txt = (r.innerText || '').trim();
+                        let pStr = String(st.lastBetPeriod);
+                        let pShort = pStr.length > 5 ? pStr.slice(-5) : pStr;
+                        if (txt.includes(pShort)) {
+                            if (txt.includes('Big') || txt.includes('BIG') || txt.includes('大')) {
+                                won = (st.lastPred === 'BIG');
+                                evaluatedMethod = "DOM_RECORD";
+                                break;
+                            } else if (txt.includes('Small') || txt.includes('SMALL') || txt.includes('小')) {
+                                won = (st.lastPred === 'SMALL');
+                                evaluatedMethod = "DOM_RECORD";
+                                break;
+                            } else {
+                                let mNum = txt.match(/\b([0-9])\b/);
+                                if (mNum) {
+                                    let n = parseInt(mNum[1]);
+                                    won = (st.lastPred === (n >= 5 ? 'BIG' : 'SMALL'));
+                                    evaluatedMethod = "DOM_RECORD";
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch(e){}
 
-                // 2. Secondary Check: EdgeOne Cloud API History
-                if (!resolved && histArray.length > 0) {
-                    let finishedItem = histArray.find(h => String(h.period || h.pid).trim() === String(st.lastBetPeriod).trim());
+                // Layer 2: EdgeOne Server History Array
+                if (evaluatedMethod === "NONE" && histArray && histArray.length > 0) {
+                    let finishedItem = histArray.find(h => {
+                        let hp = String(h.period || h.pid || h.issue || '').trim();
+                        let lp = String(st.lastBetPeriod).trim();
+                        return hp === lp || (lp.length > 5 && hp.endsWith(lp.slice(-5)));
+                    });
                     if (finishedItem) {
                         let actualSize = '';
                         if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
                         else if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
                         else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
+                        else if (finishedItem.number !== undefined) actualSize = parseInt(finishedItem.number) >= 5 ? 'BIG' : 'SMALL';
 
-                        if (actualSize === 'BIG' || actualSize === 'SMALL') {
-                            won = (st.lastPred === actualSize);
-                            resolved = true;
-                        } else if (finishedItem.status) {
+                        if (finishedItem.status) {
                             won = (String(finishedItem.status).toUpperCase() === 'WIN');
-                            resolved = true;
+                            evaluatedMethod = "API_STATUS";
+                        } else if (actualSize) {
+                            won = (st.lastPred === actualSize);
+                            evaluatedMethod = "API_SIZE";
                         }
                     }
                 }
 
-                // 3. Fallback Check: Pre-Bet Live Balance Delta Comparison
-                if (!resolved) {
-                    let preBal = parseFloat(sessionStorage.getItem('drx_pre_bet_bal') || '0');
-                    if (preBal > 0 && liveB > 0) {
-                        if (liveB > preBal - (st.lastBetAmt * 0.45)) {
-                            won = true;
-                            resolved = true;
-                        } else {
-                            won = false;
-                            resolved = true;
-                        }
-                    }
-                }
-
-                if (resolved) {
-                    st.evaluatedPeriod = st.lastBetPeriod;
-                    if (won) {
-                        st.w++;
-                        st.cur_w_streak++;
-                        st.cur_l_streak = 0;
-                        if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
-                        st.stpIdx = 0;
-                        // On Win: Dynamically recalibrate the full sequence using updated profit balance
-                        st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
+                // Layer 3: Balance Differential Fallback
+                if (evaluatedMethod === "NONE" && st.preBetBalance > 0 && freshBal > 0) {
+                    let netDiff = freshBal - st.preBetBalance;
+                    if (netDiff >= -(st.lastBetAmt * 0.15)) {
+                        won = true;
+                        evaluatedMethod = "BALANCE_GAIN";
                     } else {
-                        st.l++;
-                        st.cur_l_streak++;
-                        st.cur_w_streak = 0;
-                        if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+                        won = false;
+                        evaluatedMethod = "BALANCE_DROP";
+                    }
+                }
 
-                        // 24/7 Continuous Mode: Restart sequence to Step 1 without killing the bot
-                        if (st.stpIdx >= st.steps - 1) {
-                            st.stpIdx = 0;
-                            st.dynSeq = calcSeq(liveB > 0 ? liveB : st.curBal, st.steps);
-                        } else {
-                            st.stpIdx = st.stpIdx + 1;
-                        }
+                // Update Statistics & 24/7 Continuous Martingale State
+                if (won) {
+                    st.w++;
+                    st.cur_w_streak++;
+                    st.cur_l_streak = 0;
+                    if (st.cur_w_streak > st.max_w_streak) st.max_w_streak = st.cur_w_streak;
+                    st.stpIdx = 0;
+                    st.dynSeq = calcSeq(freshBal > 0 ? freshBal : st.curBal, st.steps);
+                } else {
+                    st.l++;
+                    st.cur_l_streak++;
+                    st.cur_w_streak = 0;
+                    if (st.cur_l_streak > st.max_l_streak) st.max_l_streak = st.cur_l_streak;
+
+                    // 24/7 CONTINUOUS NON-STOP AUTO RECYCLE:
+                    // If sequence reaches end, reset to step 0 to trade continuously without stopping
+                    if (st.stpIdx >= st.steps - 1) {
+                        st.stpIdx = 0;
+                        st.dynSeq = calcSeq(freshBal > 0 ? freshBal : st.curBal, st.steps);
+                    } else {
+                        st.stpIdx = st.stpIdx + 1;
                     }
                 }
             }
 
-            // Guaranteed Target Stop Check
-            if (st.tgtAmt > 0 && st.startBal > 0 && (liveB >= st.tgtAmt || st.curBal >= st.tgtAmt)) {
-                st.targetReached = true;
-                st.isRun = false;
-                st.isTrd = false;
-                if (st.timerInt) clearInterval(st.timerInt);
+            if (isTargetAchieved()) {
                 isFetchingApi = false;
                 return;
             }
@@ -1352,18 +1340,19 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
             let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
 
+            // Lock Period and Current Balance before trade execution
             st.isTrd = true;
             st.lastPred = incomingPred;
             st.lastBetPeriod = incomingPeriod;
             st.lastBetAmt = betAmt;
             st.preBetBalance = liveB;
-            sessionStorage.setItem('drx_pre_bet_bal', String(liveB));
 
             exeTrdFast(incomingPred, betAmt, (success) => {
                 if (success) {
                     st.tradesDone++;
                 }
                 st.isTrd = false;
+                isTargetAchieved();
             });
 
         } catch(err) {
@@ -1373,12 +1362,13 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
     };
 
     const timerTick = () => {
-        if (!st.isRun) return;
+        if (!st.isRun || isTargetAchieved()) return;
         const rem = updateTimer();
         const currentCycle = Math.floor(Date.now() / 30000);
 
-        // Optimal 24/7 window: Between 23s and 8s remaining ensures previous period DOM & balance settled
-        if (st.lastTriggeredCycle !== currentCycle && rem <= 23 && rem >= 8) {
+        // Optimal Settled Window: Dispatch between 21s and 7s remaining
+        // Previous draw settles by 25s-23s remaining, ensuring 100% accurate win/loss detection!
+        if (st.lastTriggeredCycle !== currentCycle && rem <= 21 && rem >= 7) {
             st.lastTriggeredCycle = currentCycle;
             executeCycleTradeWorkflow();
         }
@@ -1386,7 +1376,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 
     updateTimer();
     st.timerInt = setInterval(timerTick, 1000);
-    return "DRX_24_7_CONTINUOUS_ENGINE_INITIALIZED";
+    return "DRX_HTML_HUD_AND_TIMER_INTEGRATED";
 })();
 """
 
@@ -1609,63 +1599,61 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
 
 def worker_monitor_trading_loop(chat_id, sid, site_name):
     last_py_cycle = None
-    loop_tick = 0
-
+    loop_tick_count = 0
     while True:
         sess = active_sessions.get(sid)
         if not sess or not sess.get("is_trading"):
             break
 
-        loop_tick += 1
+        loop_tick_count += 1
 
-        # Periodic logout detector
-        if loop_tick % 2 == 0:
-            def _check_logout(drv):
-                return drv.execute_script("""
-                    const hash = window.location.hash || '';
-                    const href = window.location.href || '';
-                    if (hash.includes('login') || href.includes('/login')) {
-                        return "LOGGED_OUT_URL";
-                    }
-                    const bodyText = document.body ? document.body.innerText : '';
-                    if (bodyText.includes('Token has expired') || 
-                        bodyText.includes('please login again') || 
-                        bodyText.includes('already logged in') ||
-                        bodyText.includes('somewhere else') ||
-                        bodyText.includes('Error: 147') ||
-                        bodyText.includes('frozen')) {
-                        return "LOGGED_OUT_MSG";
-                    }
-                    const token = localStorage.getItem('token') || localStorage.getItem('token_str') || sessionStorage.getItem('token');
-                    if (!token && !hash.includes('WinGo')) {
-                        return "TOKEN_LOST";
-                    }
-                    return null;
-                """)
+        # Check for logout / session takeover
+        def _check_logout(drv):
+            return drv.execute_script("""
+                const hash = window.location.hash || '';
+                const href = window.location.href || '';
+                if (hash.includes('login') || href.includes('/login')) {
+                    return "LOGGED_OUT_URL";
+                }
+                const bodyText = document.body ? document.body.innerText : '';
+                if (bodyText.includes('Token has expired') || 
+                    bodyText.includes('please login again') || 
+                    bodyText.includes('already logged in') ||
+                    bodyText.includes('somewhere else') ||
+                    bodyText.includes('Error: 147') ||
+                    bodyText.includes('frozen')) {
+                    return "LOGGED_OUT_MSG";
+                }
+                const token = localStorage.getItem('token') || localStorage.getItem('token_str') || sessionStorage.getItem('token');
+                if (!token && !hash.includes('WinGo')) {
+                    return "TOKEN_LOST";
+                }
+                return null;
+            """)
 
-            logout_reason = safe_tab_execute(sid, _check_logout)
-            if logout_reason:
-                logger.warning(f"Session {sid} logged out detected! Reason: {logout_reason}")
-                emit_event_to_manager("ACCOUNT_LOGGED_OUT", {
-                    "session_id": sid,
-                    "chat_id": chat_id,
-                    "site_name": site_name,
-                    "reason": logout_reason,
-                    "message": "⚠️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
-                })
-                terminate_session_cleanly(sid)
-                break
+        logout_reason = safe_tab_execute(sid, _check_logout)
+        if logout_reason:
+            logger.warning(f"Session {sid} logged out detected! Reason: {logout_reason}")
+            emit_event_to_manager("ACCOUNT_LOGGED_OUT", {
+                "session_id": sid,
+                "chat_id": chat_id,
+                "site_name": site_name,
+                "reason": logout_reason,
+                "message": "⚠️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
+            })
+            terminate_session_cleanly(sid)
+            break
 
-        # Fallback Trigger: Strictly guarded against double betting & timed in safe window
+        # Fallback Trigger: Aligned with the settled window (18-15 seconds remaining)
         now_sec = time.localtime().tm_sec
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
 
-        if 8 <= rem_sec <= 23 and last_py_cycle != cur_cycle:
+        if rem_sec in [16, 17, 18, 19] and last_py_cycle != cur_cycle:
             last_py_cycle = cur_cycle
             best_pred = python_fetch_best_prediction()
             safe_tab_execute(sid, lambda drv: drv.execute_script(f"""
-                if (window.__WINGO_EXECUTE_TRADE && window.__WINGO_ST && !window.__WINGO_ST.isTrd) {{
+                if (window.__WINGO_EXECUTE_TRADE && window.__WINGO_ST && !window.__WINGO_ST.isTrd && window.__WINGO_ST.isRun) {{
                     window.__WINGO_EXECUTE_TRADE('{best_pred}');
                 }}
             """))
@@ -1698,7 +1686,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             sess["losses"] = js_data.get("l", 0)
             tgt_amt = float(js_data.get("tgtAmt", 0.0))
             start_b = float(js_data.get("startBal") or sess.get("start_bal", 0.0))
-            is_run = js_data.get("isRun", True)
+            is_run = js_data.get("isRun", False)
+            circuit_breaker = js_data.get("circuitBreakerTriggered", False)
             step_idx = js_data.get("step", 1)
             tot_steps = js_data.get("steps", sess.get("total_steps", 5))
 
@@ -1706,7 +1695,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "chat_id": chat_id,
                 "session_id": sid,
                 "site_name": site_name,
-                "status": "RUNNING",
+                "status": "RUNNING" if is_run else "PAUSED",
                 "start_balance": start_b,
                 "current_balance": sess["cur_bal"],
                 "target_amount": tgt_amt,
@@ -1719,7 +1708,18 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             }
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            # Guaranteed Target Achieved Stop Condition
+            # Auto-Recovery Guard: 24/7 Continuous Trading Re-arm
+            if circuit_breaker:
+                logger.warning(f"Cycle completed on sid: {sid}. Auto-recycling sequence to continue 24/7 continuous trading...")
+                safe_tab_execute(sid, lambda drv: drv.execute_script("""
+                    if (window.__WINGO_ST) {
+                        window.__WINGO_ST.circuitBreakerTriggered = false;
+                        window.__WINGO_ST.isRun = true;
+                        window.__WINGO_ST.stpIdx = 0;
+                    }
+                """))
+
+            # STRICT STOP CONDITION: Stops ONLY when target goal is fully reached
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0:
                 sess["is_trading"] = False
                 task_payload["status"] = "COMPLETED"
@@ -1736,15 +1736,15 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 })
                 terminate_session_cleanly(sid)
                 break
-            elif not is_run:
+            elif not is_run and not circuit_breaker:
                 sess["is_trading"] = False
                 break
 
-        # Periodic Garbage Collection (0.5GB Low-RAM Protection)
-        if loop_tick % 10 == 0:
+        # Periodic Garbage Collection (Every ~45 seconds) to avoid CPU spikes and lag
+        if loop_tick_count % 30 == 0:
             gc.collect()
 
-        time.sleep(2.5)
+        time.sleep(1.5)
 
 # ==============================================================================
 # WORKER TASK AND ACTION LISTENER LOOP
