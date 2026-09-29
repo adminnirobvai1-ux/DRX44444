@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-# ==============================================================================
-# DRX WINGO CLUSTER - EXECUTION WORKER NODE (ওয়ার্কার কোড)
-# ==============================================================================
-# Responsibilities:
-# - Connects to Firebase RTDB and registers as an active worker terminal
-# - Handles browser sessions (Headless Firefox, GeckoDriver, Container isolation)
-# - Performs auto-login across 6 platforms, resolves Error 22 auto-takeover
-# - Progress percentage stages (₂₀%, ₄₀%, ₆₀%, ₈₀%, ₁₀₀%) sent to Telegram
-# - Executes 24/7 continuous consecutive round betting (WinGo 30S) without skipping
-# - Ultra-fast <350ms bet dispatch on incoming periods
-# - Precision balance formatting with decimals/paisa, zero-paisa bets
-# - Absolute target balance fulfillment & immediate browser release
-# - Guaranteed zombie-free browser teardown & process hygiene
-# - Admin fleet kill switches (/data, /device, STOP / FREE ALL)
-# ==============================================================================
-
 import os
 import sys
 import subprocess
