@@ -1,5 +1,5 @@
 # ==============================================================================
-# DRX WINGO CLUSTER - EXECUTION WORKER NODE (24/7 CONTINUOUS UNSTOPPABLE ENGINE)
+# DRX WINGO CLUSTER - EXECUTION WORKER NODE (24/7 CONTINUOUS NON-STOP ENGINE)
 # ==============================================================================
 # Responsibilities:
 # - Connects to Firebase RTDB and registers as an active worker terminal
@@ -10,7 +10,7 @@
 # - Exact Step-Maker Martingale Mathematics (JavaScript 2^N - 1 Scaling Integration)
 # - Anti-Double Trade Guard (Strict Single Trade per Period Lock)
 # - Direct DOM & API Multi-Layer Accurate Win/Loss Evaluation Engine
-# - 24/7 Continuous Trading Until Exact Target Balance Is Fulfilled
+# - Continuous 24/7 Non-Stop Trading Mode (Runs until Target is Achieved)
 # - Dual-layer execution: Browser JavaScript + Python CORS-Free Engine
 # - Live Automatic Account Logout Detection & Immediate Worker Slot Freeing
 # - Guaranteed target balance fulfillment & immediate browser release
@@ -464,7 +464,7 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # 0.5GB Low Memory & Ultra-Low CPU Configuration
+    # 0.5GB Low Memory & Ultra-Smooth Performance Tuning
     options.set_preference("dom.ipc.processCount", 1)
     options.set_preference("browser.sessionhistory.max_entries", 1)
     options.set_preference("browser.sessionhistory.max_total_viewers", 0)
@@ -604,7 +604,7 @@ MODAL_AUTO_DISMISSER_JS = """
 
     sweepModals();
     if (!window.__SWEEPER_INTERVAL) {
-        window.__SWEEPER_INTERVAL = setInterval(sweepModals, 1200);
+        window.__SWEEPER_INTERVAL = setInterval(sweepModals, 1000);
     }
 })();
 """
