@@ -110,7 +110,7 @@ def to_subscript_digits(val) -> str:
 # ==============================================================================
 # GLOBAL RUNTIME CONFIGURATION
 # ==============================================================================
-FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
+FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
