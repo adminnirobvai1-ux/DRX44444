@@ -6,8 +6,8 @@
 # - Linux Malloc Arena Hardening to eradicate fragmentation on Railway Containers
 # - Non-Destructive Martingale Math Engine with Uninterrupted 24/7 Cycle Loops
 # - Smart State-Diff Telemetry Engine (Prevents Telegram UI Disappearance/FloodWait)
-# - Multi-Layer Settled-State Outcome Verification (DOM, Server API, Balance Gain)
-# - Resilient Realtime Local Prediction Bridge with BST (UTC+6) Clock
+# - Direct New API Integration (next.size & history status for 100% accurate Win/Loss)
+# - Python-First API Prediction Bridge with BST (UTC+6) Clock
 # - Aggressive Zombie Subprocess Sweeper & Active Kernel-Level Memory Cleaner
 # ==============================================================================
 
@@ -106,10 +106,10 @@ def to_subscript_digits(val) -> str:
     return "".join(SUBSCRIPT_DIGIT_MAP.get(d, d) for d in str(val))
 
 # ==============================================================================
-# GLOBAL RUNTIME CONFIGURATION
+# GLOBAL RUNTIME CONFIGURATION (নতুন এপিআই সংযুক্ত)
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://x7e77eey-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
 custom_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
@@ -125,7 +125,6 @@ else:
 
 cached_latency = 45.0
 
-# র‍্যাম ডিস্ক (/tmp) ব্যবহার যাতে এসএসডি সোয়াপ বা মেমরি লিক না ঘটে
 PROFILES_BASE_DIR = os.path.expanduser("/tmp/.ff_bot_profiles")
 os.makedirs(PROFILES_BASE_DIR, exist_ok=True)
 
@@ -142,26 +141,6 @@ PLATFORMS = {
         "name": "DK Win",
         "login": "https://dkwin6.com/#/login",
         "wingo": "https://dkwin6.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_tigroclub": {
-        "name": "Tigro Club",
-        "login": "https://tigroclub.vip/#/login",
-        "wingo": "https://tigroclub.vip/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_hgnice": {
-        "name": "HG Nice",
-        "login": "https://hgnice.org/#/login",
-        "wingo": "https://hgnice.org/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_kanpur91": {
-        "name": "Kanpur 91",
-        "login": "https://kanpur91.com/#/login",
-        "wingo": "https://kanpur91.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_bdgwinsvip": {
-        "name": "BDG Wins VIP",
-        "login": "https://bdgwinsvip.com/#/login",
-        "wingo": "https://bdgwinsvip.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
     }
 }
 
@@ -169,7 +148,7 @@ PLATFORMS = {
 # DEVICE LOCAL HTML BRIDGE GENERATOR
 # ==============================================================================
 def create_local_prediction_bridge_html():
-    """ডিভাইসে স্বয়ংক্রিয়ভাবে টাইমার এবং মাল্টি-ইঞ্জিন এপিআই সমন্বিত লোকাল HTML পেজ তৈরি করে।"""
+    """ডিভাইসে স্বয়ংক্রিয়ভাবে টাইমার এবং নতুন এপিআই সমন্বিত লোকাল HTML পেজ তৈরি করে।"""
     bridge_path = os.path.join(PROFILES_BASE_DIR, "drx_prediction_bridge.html")
     html_content = f"""<!DOCTYPE html>
 <html lang="bn">
@@ -227,7 +206,7 @@ def create_local_prediction_bridge_html():
         <div>⚡ DRX VIP TIMER ENGINE ⚡</div>
         <div id="timer">00:30</div>
         <div class="signal-box" id="prediction-box">PRED: WAITING</div>
-        <div class="status" id="rate-box">WIN RATE: --%</div>
+        <div class="status" id="rate-box">CONFIDENCE: --%</div>
         <div class="status" id="status-box">SYSTEM READY</div>
         <div class="bst-clock" id="clock-bst">BST: --:--:--</div>
     </div>
@@ -258,32 +237,15 @@ def create_local_prediction_bridge_html():
         }}
 
         function resolvePrediction(data) {{
-            let list = data.servers || (data.data && data.data.servers) || [];
-            if (!list.length) return data.top_engine ? data.top_engine.prediction : "BIG";
-
-            let parsed = list.map(s => {{
-                let r = parseFloat(String(s.win_rate || '0').replace(/[^0-9.]/g, '')) || 0;
-                let p = String(s.prediction || '').toUpperCase().trim();
-                let norm = p.includes('SMALL') ? 'SMALL' : (p.includes('BIG') ? 'BIG' : '');
-                return {{ rate: r, pred: norm }};
-            }}).filter(x => x.pred);
-
-            if (!parsed.length) return "BIG";
-
-            let maxRate = Math.max(...parsed.map(x => x.rate));
-            let top = parsed.filter(x => Math.abs(x.rate - maxRate) < 0.01);
-            let bigs = top.filter(x => x.pred === 'BIG').length;
-            let smalls = top.filter(x => x.pred === 'SMALL').length;
-
-            if (top.length === 1) return top[0].pred;
-            if (top.length === 2) return bigs === 2 ? 'BIG' : (smalls === 2 ? 'SMALL' : 'BIG');
-            if (top.length === 3) return bigs >= 2 ? 'BIG' : (smalls >= 2 ? 'SMALL' : 'BIG');
-            if (top.length === 4) {{
-                if (bigs >= 3) return 'BIG';
-                if (smalls >= 3) return 'SMALL';
-                return 'BIG';
+            if (data && data.next && data.next.size) {{
+                let s = String(data.next.size).toUpperCase().trim();
+                return s.includes('SMALL') ? 'SMALL' : 'BIG';
             }}
-            return bigs >= smalls ? 'BIG' : 'SMALL';
+            if (data && data.next && data.next.pred) {{
+                let s = String(data.next.pred).toUpperCase().trim();
+                return s.includes('SMALL') ? 'SMALL' : 'BIG';
+            }}
+            return "BIG";
         }}
 
         async function fetchPrediction() {{
@@ -293,10 +255,12 @@ def create_local_prediction_bridge_html():
                 if (!res.ok) return;
                 let data = await res.json();
                 let pred = resolvePrediction(data);
+                let conf = (data.next && data.next.confidence) || (data.stats && data.stats.accuracy) || 85;
                 
                 document.getElementById('prediction-box').innerText = "PRED: " + pred;
+                document.getElementById('rate-box').innerText = "CONFIDENCE: " + conf + "%";
                 document.getElementById('status-box').innerText = "DISPATCHED TO WORKER";
-                localStorage.setItem('drx_latest_pred', JSON.stringify({{ pred: pred, time: Date.now() }}));
+                localStorage.setItem('drx_latest_pred', JSON.stringify({{ pred: pred, confidence: conf, period: (data.next ? data.next.period : ''), time: Date.now() }}));
             }} catch(e) {{
                 document.getElementById('status-box').innerText = "FETCH ERROR - RETRYING";
             }}
@@ -305,7 +269,7 @@ def create_local_prediction_bridge_html():
         setInterval(() => {{
             let rem = updateTimer();
             let cycle = Math.floor(Date.now() / 30000);
-            if (rem >= 18 && rem <= 22 && lastTriggeredCycle !== cycle) {{
+            if (rem >= 16 && rem <= 22 && lastTriggeredCycle !== cycle) {{
                 lastTriggeredCycle = cycle;
                 fetchPrediction();
             }}
@@ -410,7 +374,6 @@ def cleanup_zombie_browsers():
         pass
 
 def enforce_low_ram_guard():
-    """০.৫ জিবি র‍্যামের ভিতর মেমোরি ব্যবহার ৮০% অতিক্রম করলে অতিরিক্ত ক্যাশ সাফাই করে।"""
     try:
         mem = psutil.virtual_memory()
         if mem.percent > 80.0:
@@ -511,7 +474,6 @@ def allocate_session_tab(session_id, target_url):
     options.add_argument("-profile")
     options.add_argument(profile_dir)
 
-    # চরম লো-র‍্যাম ফায়ারফক্স পারফরম্যান্স টিউনিং (১৮০ এমবি-র ভিতর স্থির রাখার জন্য)
     options.set_preference("browser.tabs.remote.autostart", False)
     options.set_preference("dom.ipc.processCount", 1)
     options.set_preference("browser.sessionhistory.max_entries", 1)
@@ -650,7 +612,6 @@ MODAL_AUTO_DISMISSER_JS = """
 
     sweepModals();
     if (!window.__SWEEPER_INTERVAL) {
-        // CPU ও মেমরি বাঁচাতে ইন্টারভাল ১৫০০ms করা হয়েছে
         window.__SWEEPER_INTERVAL = setInterval(sweepModals, 1500);
     }
 })();
@@ -856,12 +817,12 @@ return 0.0;
 """
 
 # ==============================================================================
-# INTEGRATED MULTI-ENGINE TIMER, STEP CALCULATOR & ON-SCREEN HUD JAVASCRIPT
+# INTEGRATED ENGINE (নতুন এপিআই লজিক ও রিয়েল এপিআই উইন/লস কাউন্টিং)
 # ==============================================================================
 WINGO_CORE_JS = r"""
 const autoTargetGoal = parseFloat(arguments[0]) || 0;
 const autoTotalSteps = parseInt(arguments[1]) || 5;
-const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json";
+const predictionApiUrl = arguments[2] || "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json";
 
 (function(){
     let hud = document.getElementById('drx-prediction-hud');
@@ -873,7 +834,7 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
             <div style="font-size:10px;font-weight:bold;color:#f0883e;">DRX VIP ENGINE (BST)</div>
             <div id="timer" style="font-size:24px;font-weight:bold;color:#39d353;margin:2px 0;">00:30</div>
             <div id="hud-signal" style="font-size:13px;font-weight:bold;color:#ffffff;">SIGNAL: --</div>
-            <div id="hud-rate" style="font-size:10px;color:#8b949e;">WIN RATE: --%</div>
+            <div id="hud-rate" style="font-size:10px;color:#8b949e;">CONFIDENCE: --%</div>
             <div id="hud-bst-time" style="font-size:9px;color:#58a6ff;margin-top:2px;">BST: --:--:--</div>
         `;
         document.body.appendChild(hud);
@@ -1030,9 +991,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         return 'EPOCH_' + Math.floor(Date.now() / 30000);
     }
 
-    // =========================================================================
-    // EXACT MARTINGALE FORMULA (MATHEMATICAL 2^N SCALING)
-    // =========================================================================
     const calcSeq = (balanceVal, stepsCountVal) => {
         let balance = parseFloat(balanceVal) || 100;
         let stepsCount = parseInt(stepsCountVal) || 5;
@@ -1070,70 +1028,27 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         }
     };
 
-    function resolvePredictionFromServers(rawJson) {
-        let serverList = [];
-        if (Array.isArray(rawJson.servers) && rawJson.servers.length > 0) {
-            serverList = rawJson.servers;
-        } else if (rawJson.data && Array.isArray(rawJson.data.servers) && rawJson.data.servers.length > 0) {
-            serverList = rawJson.data.servers;
+    // নতুন এপিআই থেকে সরাসরি প্রেডিকশন এক্সট্র্যাক্টর
+    function resolvePredictionFromApi(rawJson) {
+        if (!rawJson) return { pred: 'BIG', rate: 80, period: null, pattern: '' };
+
+        if (rawJson.next) {
+            let rawP = String(rawJson.next.size || rawJson.next.pred || '').toUpperCase().trim();
+            let normP = rawP.includes('SMALL') ? 'SMALL' : 'BIG';
+            let conf = parseInt(rawJson.next.confidence) || (rawJson.stats ? parseInt(rawJson.stats.accuracy) : 85);
+            return {
+                pred: normP,
+                rate: conf,
+                period: rawJson.next.period ? String(rawJson.next.period) : null,
+                pattern: rawJson.next.pattern || ''
+            };
         }
 
-        if (serverList.length === 0) {
-            if (rawJson.top_engine && rawJson.top_engine.prediction) {
-                let p = String(rawJson.top_engine.prediction).toUpperCase().trim();
-                return { pred: p.includes('SMALL') ? 'SMALL' : 'BIG', rate: 70 };
-            }
-            if (rawJson.prediction && rawJson.prediction.result) {
-                let p = String(rawJson.prediction.result).toUpperCase().trim();
-                return { pred: p.includes('SMALL') ? 'SMALL' : 'BIG', rate: 65 };
-            }
-            return { pred: 'BIG', rate: 50 };
+        if (rawJson.top_engine && rawJson.top_engine.prediction) {
+            let p = String(rawJson.top_engine.prediction).toUpperCase().trim();
+            return { pred: p.includes('SMALL') ? 'SMALL' : 'BIG', rate: 70, period: null, pattern: '' };
         }
-
-        let parsed = serverList.map(s => {
-            let rateRaw = String(s.win_rate || s.percentage || s.rate || '0');
-            let m = rateRaw.match(/(\d+\.?\d*)/);
-            let rateNum = m ? parseFloat(m[1]) : 0.0;
-            let rawP = String(s.prediction || s.result || s.pred || s.size || '').toUpperCase().trim();
-            let normP = rawP.includes('SMALL') ? 'SMALL' : (rawP.includes('BIG') ? 'BIG' : '');
-            return { server: s.server || s.name || '', rate: rateNum, pred: normP };
-        }).filter(item => item.pred === 'BIG' || item.pred === 'SMALL');
-
-        if (parsed.length === 0) return { pred: 'BIG', rate: 50 };
-
-        let maxRate = -1;
-        for (let i = 0; i < parsed.length; i++) {
-            if (parsed[i].rate > maxRate) maxRate = parsed[i].rate;
-        }
-
-        let topServers = parsed.filter(item => Math.abs(item.rate - maxRate) < 0.001);
-        let tiedCount = topServers.length;
-        let bigCount = 0;
-        let smallCount = 0;
-        topServers.forEach(ts => {
-            if (ts.pred === 'BIG') bigCount++;
-            else if (ts.pred === 'SMALL') smallCount++;
-        });
-
-        let finalPred = 'BIG';
-        if (tiedCount === 1) finalPred = topServers[0].pred;
-        else if (tiedCount === 2) {
-            if (bigCount === 2) finalPred = 'BIG';
-            else if (smallCount === 2) finalPred = 'SMALL';
-            else finalPred = topServers[0].pred || 'BIG';
-        } else if (tiedCount === 3) {
-            if (bigCount >= 2) finalPred = 'BIG';
-            else if (smallCount >= 2) finalPred = 'SMALL';
-            else finalPred = topServers[0].pred || 'BIG';
-        } else if (tiedCount === 4) {
-            if (bigCount >= 3) finalPred = 'BIG';
-            else if (smallCount >= 3) finalPred = 'SMALL';
-            else finalPred = topServers[0].pred || 'BIG';
-        } else {
-            finalPred = bigCount >= smallCount ? 'BIG' : 'SMALL';
-        }
-
-        return { pred: finalPred, rate: maxRate };
+        return { pred: 'BIG', rate: 50, period: null, pattern: '' };
     }
 
     const exeTrdFast = (pred, amt, cb) => {
@@ -1241,109 +1156,102 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         }
         if (isTargetAchieved()) return;
 
-        let incomingPeriod = getLiveRoundId();
-
-        // STRICT ANTI-DOUBLE BETTING GUARD
-        if (st.lastBetPeriod === incomingPeriod) {
-            return;
-        }
-
         isFetchingApi = true;
 
         try {
             let fetchUrl = predictionApiUrl + (predictionApiUrl.includes('?') ? '&' : '?') + "t=" + Date.now();
             let rawJson = null;
-            if (!overridePred) {
-                try {
-                    let res = await fetch(fetchUrl);
-                    if (res.ok) rawJson = await res.json();
-                } catch(fetchErr) {}
 
-                if (!rawJson) {
-                    try {
-                        let localItem = localStorage.getItem('drx_latest_pred');
-                        if (localItem) {
-                            let pObj = JSON.parse(localItem);
-                            if (Date.now() - pObj.time < 28000) {
-                                rawJson = { top_engine: { prediction: pObj.pred, win_rate: '70%' } };
-                            }
-                        }
-                    } catch(e){}
-                }
-            } else {
-                rawJson = { top_engine: { prediction: overridePred, win_rate: '85%' } };
-            }
+            try {
+                let res = await fetch(fetchUrl);
+                if (res.ok) rawJson = await res.json();
+            } catch(fetchErr) {}
 
             if (!rawJson) {
-                rawJson = { top_engine: { prediction: 'BIG', win_rate: '50%' } };
+                try {
+                    let localItem = localStorage.getItem('drx_latest_pred');
+                    if (localItem) {
+                        let pObj = JSON.parse(localItem);
+                        if (Date.now() - pObj.time < 28000) {
+                            rawJson = { next: { size: pObj.pred, confidence: pObj.confidence || 85, period: pObj.period } };
+                        }
+                    }
+                } catch(e){}
             }
 
-            let histArray = rawJson.history_preview || rawJson.history || (rawJson.data && rawJson.data.history) || [];
-            if (rawJson.last_period && rawJson.last_period.period) {
-                histArray = [rawJson.last_period, ...histArray];
+            let histArray = [];
+            if (rawJson && Array.isArray(rawJson.history)) {
+                histArray = rawJson.history;
+            } else if (rawJson && rawJson.data && Array.isArray(rawJson.data.history)) {
+                histArray = rawJson.data.history;
             }
 
-            // OUTCOME EVALUATION
+            // =================================================================
+            // REAL API WIN / LOSS EVALUATION (উইন-লস সরাসরি এপিআই হিস্ট্রি থেকে)
+            // =================================================================
             if (st.lastBetPeriod && st.lastBetAmt > 0 && st.evaluatedPeriod !== st.lastBetPeriod) {
                 st.evaluatedPeriod = st.lastBetPeriod;
                 triggerBalanceRefresh();
                 
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 800));
                 let freshBal = chkBal();
                 let won = false;
                 let evaluatedMethod = "NONE";
 
-                // Layer 1: Check DOM Game History
-                try {
-                    let recordRows = document.querySelectorAll('.GameList__C-body-item, .van-row, tr, [class*="record-item" i], [class*="history-item" i], .van-table__row');
-                    for (let r of recordRows) {
-                        let txt = (r.innerText || '').trim();
-                        let pStr = String(st.lastBetPeriod);
-                        let pShort = pStr.length > 5 ? pStr.slice(-5) : pStr;
-                        if (txt.includes(pShort)) {
-                            if (txt.includes('Big') || txt.includes('BIG') || txt.includes('大')) {
-                                won = (st.lastPred === 'BIG');
-                                evaluatedMethod = "DOM_RECORD";
-                                break;
-                            } else if (txt.includes('Small') || txt.includes('SMALL') || txt.includes('小')) {
-                                won = (st.lastPred === 'SMALL');
-                                evaluatedMethod = "DOM_RECORD";
-                                break;
-                            } else {
-                                let mNum = txt.match(/\b([0-9])\b/);
-                                if (mNum) {
-                                    let n = parseInt(mNum[1]);
-                                    won = (st.lastPred === (n >= 5 ? 'BIG' : 'SMALL'));
+                // Layer 1 (PRIMARY): Realtime EdgeOne API History Verification
+                if (histArray && histArray.length > 0) {
+                    let targetPeriodStr = String(st.lastBetPeriod).trim();
+                    let finishedItem = histArray.find(h => {
+                        let hp = String(h.period || h.pid || h.issue || '').trim();
+                        return hp === targetPeriodStr || (targetPeriodStr.length >= 5 && hp.endsWith(targetPeriodStr.slice(-5)));
+                    });
+
+                    if (finishedItem) {
+                        let itemStatus = String(finishedItem.status || '').toUpperCase().trim();
+                        let actualSize = '';
+                        if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
+                        else if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
+                        else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
+
+                        if (itemStatus === 'WIN' || itemStatus === 'LOSS') {
+                            won = (itemStatus === 'WIN');
+                            evaluatedMethod = "API_STATUS_" + itemStatus;
+                        } else if (actualSize) {
+                            won = (st.lastPred === actualSize);
+                            evaluatedMethod = "API_ACTUAL_SIZE";
+                        }
+                    }
+                }
+
+                // Layer 2: DOM Game History Fallback
+                if (evaluatedMethod === "NONE") {
+                    try {
+                        let recordRows = document.querySelectorAll('.GameList__C-body-item, .van-row, tr, [class*="record-item" i], [class*="history-item" i], .van-table__row');
+                        for (let r of recordRows) {
+                            let txt = (r.innerText || '').trim();
+                            let pStr = String(st.lastBetPeriod);
+                            let pShort = pStr.length > 5 ? pStr.slice(-5) : pStr;
+                            if (txt.includes(pShort)) {
+                                if (txt.includes('Big') || txt.includes('BIG') || txt.includes('大')) {
+                                    won = (st.lastPred === 'BIG');
                                     evaluatedMethod = "DOM_RECORD";
                                     break;
+                                } else if (txt.includes('Small') || txt.includes('SMALL') || txt.includes('小')) {
+                                    won = (st.lastPred === 'SMALL');
+                                    evaluatedMethod = "DOM_RECORD";
+                                    break;
+                                } else {
+                                    let mNum = txt.match(/\b([0-9])\b/);
+                                    if (mNum) {
+                                        let n = parseInt(mNum[1]);
+                                        won = (st.lastPred === (n >= 5 ? 'BIG' : 'SMALL'));
+                                        evaluatedMethod = "DOM_RECORD";
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
-                } catch(e){}
-
-                // Layer 2: EdgeOne Server History Array
-                if (evaluatedMethod === "NONE" && histArray && histArray.length > 0) {
-                    let finishedItem = histArray.find(h => {
-                        let hp = String(h.period || h.pid || h.issue || '').trim();
-                        let lp = String(st.lastBetPeriod).trim();
-                        return hp === lp || (lp.length > 5 && hp.endsWith(lp.slice(-5)));
-                    });
-                    if (finishedItem) {
-                        let actualSize = '';
-                        if (finishedItem.size) actualSize = String(finishedItem.size).toUpperCase().trim();
-                        else if (finishedItem.actual_size) actualSize = String(finishedItem.actual_size).toUpperCase().trim();
-                        else if (typeof finishedItem.actual === 'number') actualSize = finishedItem.actual >= 5 ? 'BIG' : 'SMALL';
-                        else if (finishedItem.number !== undefined) actualSize = parseInt(finishedItem.number) >= 5 ? 'BIG' : 'SMALL';
-
-                        if (finishedItem.status) {
-                            won = (String(finishedItem.status).toUpperCase() === 'WIN');
-                            evaluatedMethod = "API_STATUS";
-                        } else if (actualSize) {
-                            won = (st.lastPred === actualSize);
-                            evaluatedMethod = "API_SIZE";
-                        }
-                    }
+                    } catch(e){}
                 }
 
                 // Layer 3: Balance Differential Fallback
@@ -1387,13 +1295,22 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
                 return;
             }
 
-            let outcome = resolvePredictionFromServers(rawJson);
+            let outcome = resolvePredictionFromApi(rawJson);
             let incomingPred = overridePred || outcome.pred || 'BIG';
+            let incomingRate = outcome.rate || 80;
+
+            let incomingPeriod = (outcome.period) ? String(outcome.period).trim() : getLiveRoundId();
+
+            // STRICT ANTI-DOUBLE BETTING GUARD
+            if (st.lastBetPeriod === incomingPeriod) {
+                isFetchingApi = false;
+                return;
+            }
 
             let sEl = document.getElementById('hud-signal');
             let rEl = document.getElementById('hud-rate');
             if (sEl) sEl.innerText = "SIGNAL: " + incomingPred;
-            if (rEl) rEl.innerText = "WIN RATE: " + outcome.rate + "%";
+            if (rEl) rEl.innerText = "CONFIDENCE: " + incomingRate + "%";
 
             let betAmt = Math.floor(st.dynSeq[st.stpIdx]) || 1;
 
@@ -1422,7 +1339,6 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
         const rem = updateTimer();
         const currentCycle = Math.floor(Date.now() / 30000);
 
-        // সিগন্যাল এক্সিকিউশন উইন্ডো (২০ থেকে ৮ সেকেন্ড বাকি থাকতে)
         if (st.lastTriggeredCycle !== currentCycle && rem <= 20 && rem >= 8) {
             st.lastTriggeredCycle = currentCycle;
             executeCycleTradeWorkflow();
@@ -1436,50 +1352,34 @@ const predictionApiUrl = arguments[2] || "https://drx-tm-vip-hack-code6.edgeone.
 """
 
 # ==============================================================================
-# PYTHON PARALLEL PREDICTION FETCH (CORS BYPASS)
+# PYTHON PARALLEL PREDICTION FETCH (নতুন এপিআই ফার্স্ট কল লজিক)
 # ==============================================================================
 def python_fetch_best_prediction():
+    """নতুন API থেকে পাইথন দিয়ে সরাসরি 'next.size' এবং 'confidence' সিগন্যাল রিড করে।"""
     try:
         req = urllib.request.Request(
             f"{PREDICTION_API_URL}?t={int(time.time()*1000)}",
-            headers={"User-Agent": "Mozilla/5.0"}
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         )
-        with urllib.request.urlopen(req, timeout=3.0) as res:
+        with urllib.request.urlopen(req, timeout=3.5) as res:
             data = json.loads(res.read().decode("utf-8"))
 
-        servers = data.get("servers", [])
-        if not servers:
-            return data.get("top_engine", {}).get("prediction", "BIG").upper()
+        next_obj = data.get("next") or {}
+        if next_obj:
+            raw_pred = str(next_obj.get("size") or next_obj.get("pred") or "").upper().strip()
+            if "SMALL" in raw_pred:
+                return "SMALL"
+            elif "BIG" in raw_pred:
+                return "BIG"
 
-        parsed = []
-        for s in servers:
-            r_str = "".join([c for c in str(s.get("win_rate", "0")) if c.isdigit() or c == '.'])
-            rate = float(r_str) if r_str else 0.0
-            p = str(s.get("prediction", "")).upper().strip()
-            norm = "SMALL" if "SMALL" in p else ("BIG" if "BIG" in p else "")
-            if norm:
-                parsed.append({"rate": rate, "pred": norm})
+        if "history" in data and len(data["history"]) > 0:
+            last_pred = str(data["history"][0].get("pred", "")).upper()
+            if "SMALL" in last_pred: return "SMALL"
+            if "BIG" in last_pred: return "BIG"
 
-        if not parsed:
-            return "BIG"
-
-        max_rate = max(x["rate"] for x in parsed)
-        top = [x for x in parsed if abs(x["rate"] - max_rate) < 0.01]
-        bigs = sum(1 for x in top if x["pred"] == "BIG")
-        smalls = sum(1 for x in top if x["pred"] == "SMALL")
-
-        if len(top) == 1:
-            return top[0]["pred"]
-        elif len(top) == 2:
-            return "BIG" if bigs == 2 else ("SMALL" if smalls == 2 else "BIG")
-        elif len(top) == 3:
-            return "BIG" if bigs >= 2 else ("SMALL" if smalls >= 2 else "BIG")
-        elif len(top) == 4:
-            if bigs >= 3: return "BIG"
-            if smalls >= 3: return "SMALL"
-            return "BIG"
-        return "BIG" if bigs >= smalls else "SMALL"
-    except Exception:
+        return "BIG"
+    except Exception as e:
+        logger.error(f"Error fetching prediction from API: {e}")
         return "BIG"
 
 # ==============================================================================
@@ -1664,7 +1564,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         loop_tick_count += 1
         enforce_low_ram_guard()
 
-        # Logout ও Session Takeover চেকার
         def _check_logout(drv):
             return drv.execute_script("""
                 const hash = window.location.hash || '';
@@ -1696,17 +1595,20 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "chat_id": chat_id,
                 "site_name": site_name,
                 "reason": logout_reason,
-                "message": "⚠️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
+                "message": "⚠️️ আপনার অ্যাকাউন্টটি অন্য ডিভাইসে লগইন করার কারণে এই সেশনটি লগআউট হয়ে গেছে। ওয়ার্কার স্লটটি মুক্ত করা হলো।"
             })
             terminate_session_cleanly(sid)
             break
 
-        # ব্যাকএন্ড পাইথন প্রেডিকশন হ্যান্ডলার
+        # =====================================================================
+        # ব্যাকএন্ড পাইথন ডিরেক্ট এপিআই প্রেডিকশন হ্যান্ডলার
+        # =====================================================================
         now_bst = bst_now()
         now_sec = now_bst.second
         rem_sec = 30 - (now_sec % 30)
         cur_cycle = int(time.time() // 30)
 
+        # রাউন্ডের ১৬ থেকে ১৮ সেকেন্ডের ভেতর পাইথন সরাসরি নতুন এপিআই কল করে ব্রাউজারে ইনজেক্ট করবে
         if rem_sec in [16, 17, 18] and last_py_cycle != cur_cycle:
             last_py_cycle = cur_cycle
             best_pred = python_fetch_best_prediction()
@@ -1749,7 +1651,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             step_idx = js_data.get("step", 1)
             tot_steps = js_data.get("steps", sess.get("total_steps", 5))
 
-            # SMART STATE-DIFF ENGINE: টেলিগ্রাম বাটন মুছে যাওয়া ও FloodWait রোধকরণ
             current_signature = {
                 "bal": sess["cur_bal"],
                 "w": sess["wins"],
@@ -1758,7 +1659,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "r": is_run
             }
 
-            # ডেটায় পরিবর্তন আসলে অথবা প্রতি ১৫ সেকেন্ডে একবার ফায়ারবেস আপডেট হবে
             state_changed = (current_signature != last_synced_state)
             if state_changed or (loop_tick_count % 8 == 0):
                 last_synced_state = current_signature
@@ -1780,9 +1680,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 }
                 firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", task_payload)
 
-            # Auto-Recovery Guard: ২৪/৭ কন্টিনিউয়াস ট্রেডিং রিস্টার্ট
             if circuit_breaker:
-                logger.warning(f"Cycle completed on sid: {sid}. Auto-recycling sequence to continue 24/7 uninterrupted...")
                 safe_tab_execute(sid, lambda drv: drv.execute_script("""
                     if (window.__WINGO_ST) {
                         window.__WINGO_ST.circuitBreakerTriggered = false;
@@ -1791,7 +1689,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     }
                 """))
 
-            # STRICT STOP CONDITION: টার্গেট পূরণ হলে স্বয়ংক্রিয়ভাবে বন্ধ হবে
             if tgt_amt > 0 and sess["cur_bal"] >= tgt_amt and start_b > 0:
                 logger.info(f"Target achieved! Goal: {tgt_amt} | Bal: {sess['cur_bal']}. Terminating gracefully...")
                 sess["is_trading"] = False
@@ -1827,7 +1724,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 sess["is_trading"] = False
                 break
 
-        # প্রতি ২৫ লুপে জোরপূর্বক মেমরি আবর্জনা পরিষ্কারকরণ
         if loop_tick_count % 25 == 0:
             gc.collect()
 
