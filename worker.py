@@ -2,6 +2,7 @@
 # DRX WINGO CLUSTER - ULTRA RESILIENT DYNAMIC WORKER NODE (512MB RAM ENGINE)
 # ==============================================================================
 # Architecture & Capabilities:
+# - Immutable / Locked Martingale Step Engine (Fixed Steps across Whole Session)
 # - Pure Python-Driven API Prediction & Round Synchronizer (No Client-side Fetch)
 # - Dynamic Bidirectional Trade Dispatcher (Full Support for both BIG & SMALL)
 # - Anti-Double-Bet Period Locking Guard with Bangladesh Standard Time (BST/UTC+6)
@@ -193,8 +194,8 @@ def emit_event_to_manager(event_type: str, data: dict):
 # ==============================================================================
 def python_fetch_live_prediction(timeout: float = 4.0):
     """
-    Fetches real-time prediction and round parameters directly inside Python.
-    Strictly follows API guidance: returns 'BIG' or 'SMALL' without bias.
+    Fetches real-time prediction directly in Python.
+    Strictly yields 'BIG' or 'SMALL' without bias.
     """
     url = f"{PREDICTION_API_URL}?t={int(time.time()*1000)}"
     headers = {
@@ -250,7 +251,7 @@ def python_fetch_live_prediction(timeout: float = 4.0):
                 pred_side = "BIG"
 
         if not pred_side:
-            logger.warning("Prediction API returned valid JSON but no definitive BIG or SMALL signal.")
+            logger.warning("Prediction API returned valid response but no definitive BIG or SMALL signal.")
             return None
 
         return {
@@ -265,24 +266,33 @@ def python_fetch_live_prediction(timeout: float = 4.0):
         logger.error(f"Failed to fetch live prediction from Python backend: {e}")
         return None
 
-def calculate_martingale_sequence(balance_val: float, steps_val: int) -> list:
-    """Calculates non-destructive dynamic Martingale sequence based on live balance."""
-    balance = float(balance_val) if float(balance_val) > 0 else 100.0
-    steps = max(1, int(steps_val))
-    sum_powers = (2 ** steps) - 1
-    first_step = balance / sum_powers
-
-    sequence = []
-    total = 0
+# ==============================================================================
+# IMMUTABLE LOCKED MARTINGALE GENERATOR (নির্ধারিত লকড স্টেপ জেনারেটর)
+# ==============================================================================
+def generate_locked_martingale_plan(initial_balance: float, total_steps: int) -> list:
+    """
+    সেশন শুরুর প্রাক্কালে প্রারম্ভিক ব্যালেন্স ও মোট স্টেপ সংখ্যার ভিত্তিতে
+    একটি ফিক্সড মার্টিঙ্গেল তালিকা প্রস্তুত করে।
+    এই তালিকাটি পুরো সেশনে অপরিবর্তিত থাকে এবং ব্যালেন্স কমলে বা বাড়লে পরিবর্তন হয় না।
+    """
+    balance = max(10.0, float(initial_balance))
+    steps = max(1, int(total_steps))
+    
+    # 2^n - 1 ফর্মুলা অনুযায়ী প্রারম্ভিক বেস ইউনিট গণনা
+    # অতিরিক্ত স্টেপ সংখ্যার ক্ষেত্রে ওভারফ্লো প্রতিরোধ
+    effective_steps = min(steps, 25)
+    sum_powers = (2 ** effective_steps) - 1
+    
+    calculated_first_step = balance / sum_powers
+    base_unit = max(1, round(calculated_first_step))
+    
+    plan = []
     for i in range(steps):
-        step_amt = max(1, round(first_step * (2 ** i)))
-        sequence.append(step_amt)
-        total += step_amt
-
-    rounding_error = round(balance - total)
-    if rounding_error != 0 and len(sequence) > 0:
-        sequence[-1] = max(1, sequence[-1] + rounding_error)
-    return sequence
+        # বিশুদ্ধ দ্বিগুণ (2x) মার্টিঙ্গেল প্রগ্রেশন
+        step_amt = max(1, base_unit * (2 ** i))
+        plan.append(step_amt)
+        
+    return plan
 
 # ==============================================================================
 # GUARANTEED PROCESS TEARDOWN & ACTIVE RAM SWEEPER
@@ -509,7 +519,7 @@ def safe_tab_execute(sid, task_fn, timeout=20.0):
     return result_container["res"]
 
 # ==============================================================================
-# INJECTED JAVASCRIPT AUTOMATION (PURE DOM EXECUTION & UI DISPLAY ONLY)
+# INJECTED JAVASCRIPT AUTOMATION (DOM EXECUTION & UI DISPLAY ONLY)
 # ==============================================================================
 MODAL_AUTO_DISMISSER_JS = """
 (function(){
@@ -788,7 +798,7 @@ return null;
 """
 
 # ==============================================================================
-# CLIENT-SIDE HEADS-UP DISPLAY (HUD) INITIALIZATION (NO FETCH, PASSIVE ONLY)
+# PASSIVE HUD ENGINE (DISPLAY ONLY)
 # ==============================================================================
 WINGO_INIT_HUD_JS = r"""
 (function(){
@@ -796,13 +806,14 @@ WINGO_INIT_HUD_JS = r"""
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'drx-prediction-hud';
-        hud.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999999;background:rgba(13,17,23,0.92);border:1px solid #30363d;border-radius:8px;padding:8px;color:#58a6ff;font-family:monospace;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.6);width:160px;pointer-events:none;';
+        hud.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999999;background:rgba(13,17,23,0.92);border:1px solid #30363d;border-radius:8px;padding:8px;color:#58a6ff;font-family:monospace;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,0.6);width:165px;pointer-events:none;';
         hud.innerHTML = `
             <div style="font-size:10px;font-weight:bold;color:#f0883e;">⚡ DRX VIP WORKER ⚡</div>
             <div id="hud-timer" style="font-size:22px;font-weight:bold;color:#39d353;margin:2px 0;">00:30</div>
-            <div id="hud-signal" style="font-size:14px;font-weight:bold;color:#ffffff;">SIGNAL: STANDBY</div>
+            <div id="hud-signal" style="font-size:13px;font-weight:bold;color:#ffffff;">SIGNAL: STANDBY</div>
+            <div id="hud-step-info" style="font-size:11px;font-weight:bold;color:#388bfd;margin-top:2px;">STEP: 1 | BET: --</div>
             <div id="hud-rate" style="font-size:10px;color:#8b949e;">CONFIDENCE: --%</div>
-            <div id="hud-bst-time" style="font-size:9px;color:#388bfd;margin-top:2px;">BST: --:--:--</div>
+            <div id="hud-bst-time" style="font-size:9px;color:#8b949e;margin-top:2px;">BST: --:--:--</div>
         `;
         document.body.appendChild(hud);
     }
@@ -845,8 +856,12 @@ WINGO_INIT_HUD_JS = r"""
 UPDATE_HUD_TELEMETRY_JS = """
 const pred = arguments[0];
 const conf = arguments[1];
+const stepNum = arguments[2];
+const betAmt = arguments[3];
+
 const hudSig = document.getElementById('hud-signal');
 const hudRate = document.getElementById('hud-rate');
+const hudStep = document.getElementById('hud-step-info');
 
 if (hudSig) {
     hudSig.innerText = "SIGNAL: " + pred;
@@ -861,10 +876,13 @@ if (hudSig) {
 if (hudRate) {
     hudRate.innerText = "CONFIDENCE: " + conf + "%";
 }
+if (hudStep) {
+    hudStep.innerText = "STEP: " + stepNum + " | BET: " + betAmt + " BDT";
+}
 """
 
 # ==============================================================================
-# DYNAMIC BIDIRECTIONAL ORDER DISPATCHER (BIG & SMALL WITH COMPLETE SAFETY)
+# DYNAMIC BIDIRECTIONAL TRADE EXECUTION (BIG & SMALL)
 # ==============================================================================
 EXECUTE_BIDIRECTIONAL_ORDER_JS = r"""
 const targetSide = String(arguments[0] || '').toUpperCase().trim();
@@ -886,7 +904,7 @@ const simClick = (el) => {
 };
 
 try {
-    // 1. Dismiss any lingering overlays or popups
+    // পপআপ অথবা ডায়ালগ অপসারণ
     document.querySelectorAll('.van-dialog, .announcement-box, .bonus-dialog').forEach(el => {
         let cBtn = el.querySelector('.van-dialog__confirm, button');
         if (cBtn) try { cBtn.click(); } catch(e){}
@@ -896,7 +914,6 @@ try {
     let targetBtn = null;
 
     if (targetSide === 'BIG') {
-        // High-specificity selectors for BIG
         targetBtn = document.querySelector('.Betting__C-foot-b, .bet-btn-big, button[class*="big" i]');
         if (!targetBtn) {
             let allBtns = document.querySelectorAll('button, div[role="button"], span');
@@ -909,7 +926,6 @@ try {
             }
         }
     } else if (targetSide === 'SMALL') {
-        // High-specificity selectors for SMALL
         targetBtn = document.querySelector('.Betting__C-foot-s, .bet-btn-small, button[class*="small" i]');
         if (!targetBtn) {
             let allBtns = document.querySelectorAll('button, div[role="button"], span');
@@ -927,10 +943,10 @@ try {
         return { status: "FAILED", reason: "TARGET_BUTTON_NOT_FOUND_FOR_" + targetSide };
     }
 
-    // 2. Click the specific side button (Big or Small)
+    // বাটন ক্লিক (Big অথবা Small)
     simClick(targetBtn);
 
-    // 3. Set Bet Amount in the modal stepper/input
+    // ইনপুট বক্সে টাকার পরিমাণ ইনজেক্ট
     setTimeout(() => {
         let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
         if (inpEl) {
@@ -945,7 +961,7 @@ try {
             inpEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // 4. Click Final Bet Submit Confirmation Button
+        // ফাইনাল বেট কনফার্ম বাটন ক্লিক
         setTimeout(() => {
             let confirmBtn = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
             if (!confirmBtn) {
@@ -1030,7 +1046,7 @@ return { evaluated: false };
 """
 
 # ==============================================================================
-# WORKER LOGIN AND SESSION ACTIVATION
+# WORKER LOGIN FLOW
 # ==============================================================================
 def execute_worker_login(chat_id, sid, phone, password, login_url, site_name, anim_msg_id):
     emit_event_to_manager("PROGRESS_STAGE", {
@@ -1199,14 +1215,14 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
     })
 
 # ==============================================================================
-# AUTOMATED TRADING LOOP (100% PYTHON-DRIVEN PREDICTION & DISPATCH)
+# AUTOMATED TRADING LOOP (LOCKED MARTINGALE STEP EXECUTION)
 # ==============================================================================
 def worker_monitor_trading_loop(chat_id, sid, site_name):
     """
     Automated trade cycle loop:
-    - Calls prediction API strictly from Python.
-    - Evaluates wins/losses from API history & account balance.
-    - Places orders dynamically on both BIG and SMALL according to API.
+    - Locked Step List: সেশন শুরুর স্টেপ প্ল্যান অপরিবর্তিত থাকে।
+    - Python Backend Real-time Signal Fetching.
+    - Dynamic Bidirectional Execution (Big & Small).
     """
     sess = active_sessions.get(sid)
     if not sess:
@@ -1214,10 +1230,10 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
 
     logger.info(f"[{WORKER_ALIAS}] Launching Python trading monitor for session: {sid}")
 
-    # Inject HUD (Passive visual component)
+    # HUD ইনজেকশন
     safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_INIT_HUD_JS))
 
-    # Initialize Trading Parameters
+    # প্রাথমিক ব্যালেন্স নিশ্চিতকরণ
     initial_bal = sess.get("start_bal", 0.0)
     if initial_bal <= 0:
         fresh_b = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS))
@@ -1227,10 +1243,18 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
     target_goal = float(sess.get("target_goal", 0.0))
     total_steps = int(sess.get("total_steps", 5))
 
-    # Internal state machine
+    # ==========================================================================
+    # গুরুত্বপূর্ণ: সেশনের জন্য একবারই মার্টিঙ্গেল স্টেপ প্ল্যান তৈরি ও লক করা হলো
+    # ==========================================================================
+    locked_martingale_plan = generate_locked_martingale_plan(initial_bal, total_steps)
+    logger.info(
+        f"[{WORKER_ALIAS}] LOCKED MARTINGALE PLAN INITIALIZED: {locked_martingale_plan} | "
+        f"Initial Balance: {initial_bal} BDT | Steps: {total_steps}"
+    )
+
     state = {
         "step_idx": 0,
-        "martingale_seq": calculate_martingale_sequence(initial_bal, total_steps),
+        "locked_plan": locked_martingale_plan,  # সেশন চলাকালীন এই তালিকা ফিক্সড
         "wins": 0,
         "losses": 0,
         "cur_w_streak": 0,
@@ -1254,7 +1278,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         enforce_low_ram_guard()
 
         # ----------------------------------------------------------------------
-        # 1. Verification of Account Login State
+        # ১. লগআউট অথবা সেশন ডিসকানেক্ট গার্ড
         # ----------------------------------------------------------------------
         def _check_logout(drv):
             return drv.execute_script("""
@@ -1289,7 +1313,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             break
 
         # ----------------------------------------------------------------------
-        # 2. Timing Analysis & Cycle Identification (BST UTC+6)
+        # ২. সময় বিশ্লেষণ (BST UTC+6)
         # ----------------------------------------------------------------------
         now_bst = bst_now()
         seconds = now_bst.second
@@ -1297,15 +1321,13 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         current_cycle = int(time.time() // 30)
 
         # ----------------------------------------------------------------------
-        # 3. WIN / LOSS EVALUATION AT START OF CYCLE (Seconds 28 to 22)
+        # ৩. উইন / লস ফলাফল মূল্যায়ন (রাউন্ড শুরুর ২২ থেকে ২৮ সেকেন্ডে)
         # ----------------------------------------------------------------------
         if remaining_seconds >= 22 and state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
-            # Give the server a moment to settle round records
             time.sleep(1.0)
             target_period = state["last_bet_period"]
             state["last_evaluated_period"] = target_period
 
-            # Query fresh balance
             fresh_bal = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS))
             if fresh_bal and float(fresh_bal) > 0:
                 sess["cur_bal"] = float(fresh_bal)
@@ -1315,7 +1337,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             round_won = False
             eval_source = "NONE"
 
-            # Layer 1: Check from API history
+            # Layer 1: API History ভেরিফিকেশন
             live_api_data = python_fetch_live_prediction(timeout=3.0)
             if live_api_data and live_api_data.get("history"):
                 for hist_item in live_api_data["history"]:
@@ -1335,7 +1357,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             eval_source = "API_ACTUAL_SIZE"
                             break
 
-            # Layer 2: Check from Browser DOM
+            # Layer 2: DOM স্ক্র্যাপার ফলব্যাক
             if not is_evaluated:
                 dom_eval = safe_tab_execute(
                     sid,
@@ -1346,7 +1368,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     is_evaluated = True
                     eval_source = dom_eval.get("source", "DOM_RECORD")
 
-            # Layer 3: Balance Difference Fallback
+            # Layer 3: ব্যালেন্স তারতম্য ফলব্যাক
             if not is_evaluated and sess["cur_bal"] > 0 and state["pre_bet_balance"] > 0:
                 diff = sess["cur_bal"] - state["pre_bet_balance"]
                 if diff >= -(state["last_bet_amount"] * 0.15):
@@ -1357,7 +1379,9 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     eval_source = "BALANCE_DROP"
                 is_evaluated = True
 
-            # Update Martingale Progression
+            # ==================================================================
+            # স্টেপ প্রগ্রেশন লজিক: ফিক্সড স্টেপ প্ল্যান কোনোমতেই ভাঙবে না
+            # ==================================================================
             if is_evaluated:
                 if round_won:
                     state["wins"] += 1
@@ -1365,10 +1389,14 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     state["cur_l_streak"] = 0
                     if state["cur_w_streak"] > state["max_w_streak"]:
                         state["max_w_streak"] = state["cur_w_streak"]
+                    
+                    # প্রফিট হলে সরাসরি ১ম স্টেপে (index 0) ফেরত যাবে
                     state["step_idx"] = 0
-                    # Recalculate based on updated winning balance
-                    state["martingale_seq"] = calculate_martingale_sequence(sess["cur_bal"], total_steps)
-                    logger.info(f"[{WORKER_ALIAS}] [ROUND WIN] Period {target_period} via {eval_source}. Martingale reset to Step 1.")
+                    next_stake = state["locked_plan"][0]
+                    logger.info(
+                        f"[{WORKER_ALIAS}] [WIN EVALUATED] Period: {target_period} via {eval_source} | "
+                        f"Step reset to 1 (Next Bet: {next_stake} BDT)"
+                    )
                 else:
                     state["losses"] += 1
                     state["cur_l_streak"] += 1
@@ -1376,23 +1404,31 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     if state["cur_l_streak"] > state["max_l_streak"]:
                         state["max_l_streak"] = state["cur_l_streak"]
 
-                    # 24/7 continuous cycle: reset to step 1 after step threshold
-                    if state["step_idx"] >= total_steps - 1:
-                        logger.warning(f"[{WORKER_ALIAS}] Martingale sequence reached maximum step ({total_steps}). Recycling safely to Step 1.")
+                    # লস হলে তালিকার পরবর্তী স্টেপে যাবে
+                    if state["step_idx"] >= len(state["locked_plan"]) - 1:
+                        # সম্পূর্ণ সাইকেল লস হলে নিরাপদভাবে আবার ১ম স্টেপে রিসাইকেল হবে
+                        logger.warning(
+                            f"[{WORKER_ALIAS}] Maximum step ({total_steps}) reached. "
+                            f"Recycling back to Step 1 of the locked plan."
+                        )
                         state["step_idx"] = 0
-                        state["martingale_seq"] = calculate_martingale_sequence(sess["cur_bal"], total_steps)
                     else:
                         state["step_idx"] += 1
-                        logger.info(f"[{WORKER_ALIAS}] [ROUND LOSS] Period {target_period} via {eval_source}. Advanced to Step {state['step_idx'] + 1}.")
+                    
+                    next_stake = state["locked_plan"][state["step_idx"]]
+                    logger.info(
+                        f"[{WORKER_ALIAS}] [LOSS EVALUATED] Period: {target_period} via {eval_source} | "
+                        f"Advanced to Step {state['step_idx'] + 1} (Next Bet: {next_stake} BDT)"
+                    )
 
         # ----------------------------------------------------------------------
-        # 4. TARGET BALANCE MONITORING
+        # ৪. টার্গেট ব্যালেন্স মনিটরিং
         # ----------------------------------------------------------------------
         live_b = sess.get("cur_bal", 0.0)
         start_b = sess.get("start_bal", 0.0)
 
         if target_goal > 0 and live_b >= target_goal and start_b > 0:
-            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Terminating gracefully...")
+            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Stopping cleanly...")
             sess["is_trading"] = False
 
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", {
@@ -1405,6 +1441,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "target_amount": target_goal,
                 "step": state["step_idx"] + 1,
                 "total_steps": total_steps,
+                "step_plan": state["locked_plan"],
                 "wins": state["wins"],
                 "losses": state["losses"],
                 "currency": "BDT",
@@ -1424,44 +1461,45 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             break
 
         # ----------------------------------------------------------------------
-        # 5. DYNAMIC PREDICTION DISPATCH (Window: 18s to 8s before lock)
+        # ৫. ডাইনামিক ট্রেড ডিসপ্যাচ (লক হওয়ার ৮ থেকে ১৯ সেকেন্ড পূর্বে)
         # ----------------------------------------------------------------------
         if 8 <= remaining_seconds <= 19 and state["last_cycle_dispatched"] != current_cycle:
             state["last_cycle_dispatched"] = current_cycle
 
-            # A. Fetch Live Prediction in Python
+            # পাইথন ব্যাকএন্ড থেকে সরাসরি প্রেডিকশন রিসিভ
             pred_data = python_fetch_live_prediction()
             if pred_data and pred_data.get("prediction"):
-                signal_side = pred_data["prediction"]  # 'BIG' or 'SMALL'
+                signal_side = pred_data["prediction"]  # 'BIG' অথবা 'SMALL'
                 confidence = pred_data["confidence"]
                 api_period = pred_data.get("period")
 
-                # Get DOM period ID for validation
                 dom_period = safe_tab_execute(sid, lambda drv: drv.execute_script(GET_ACTIVE_ROUND_PERIOD_JS))
                 active_period = str(api_period or dom_period or f"CYCLE_{current_cycle}").strip()
 
-                # Guard: Prevent double betting on identical round
+                # অ্যান্টি-ডাবল বেটিং গার্ড: একই রাউন্ডে বারবার ট্রেড প্রতিরোধ
                 if state["last_bet_period"] != active_period:
-                    # Update Visual HUD
-                    safe_tab_execute(sid, lambda drv: drv.execute_script(UPDATE_HUD_TELEMETRY_JS, signal_side, confidence))
+                    # ফিক্সড প্ল্যান থেকে বর্তমান স্টেপের অ্যামাউন্ট পিক করা
+                    idx = min(state["step_idx"], len(state["locked_plan"]) - 1)
+                    stake_amount = state["locked_plan"][idx]
 
-                    # Calculate Stake
-                    seq = state["martingale_seq"]
-                    idx = min(state["step_idx"], len(seq) - 1)
-                    stake_amount = seq[idx] if idx >= 0 else 1
+                    # HUD আপডেট
+                    safe_tab_execute(
+                        sid, 
+                        lambda drv: drv.execute_script(UPDATE_HUD_TELEMETRY_JS, signal_side, confidence, idx + 1, stake_amount)
+                    )
 
-                    # Refresh Pre-Bet Balance
+                    # ট্রেডের আগের ব্যালেন্স নিশ্চিতকরণ
                     cur_b_check = safe_tab_execute(sid, lambda drv: drv.execute_script(FETCH_BALANCE_JS))
                     if cur_b_check and float(cur_b_check) > 0:
                         state["pre_bet_balance"] = float(cur_b_check)
                         sess["cur_bal"] = float(cur_b_check)
 
                     logger.info(
-                        f"[{WORKER_ALIAS}] [EXECUTING TRADE] Side: {signal_side} | Stake: {stake_amount} BDT | "
+                        f"[{WORKER_ALIAS}] [DISPATCHING ORDER] Side: {signal_side} | Stake: {stake_amount} BDT | "
                         f"Step: {idx + 1}/{total_steps} | Period: {active_period} | Conf: {confidence}%"
                     )
 
-                    # B. Dispatch to Browser DOM (Clicks Big or Small based strictly on signal)
+                    # ব্রাউজার DOM-এ অর্ডার প্লেস (BIG আসলে BIG, SMALL আসলে SMALL)
                     order_result = safe_tab_execute(
                         sid,
                         lambda drv: drv.execute_script(EXECUTE_BIDIRECTIONAL_ORDER_JS, signal_side, stake_amount, active_period)
@@ -1472,14 +1510,14 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         state["last_bet_period"] = active_period
                         state["last_bet_side"] = signal_side
                         state["last_bet_amount"] = stake_amount
-                        logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED SUCCESS] Side: {signal_side} | Period: {active_period}")
+                        logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED] Side: {signal_side} | Amount: {stake_amount} BDT | Period: {active_period}")
                     else:
-                        logger.error(f"[{WORKER_ALIAS}] [TRADE FAILED] {order_result}")
+                        logger.error(f"[{WORKER_ALIAS}] [TRADE FAILED] Reason: {order_result}")
             else:
-                logger.warning(f"[{WORKER_ALIAS}] Prediction signal unavailable from Python backend. Holding trade this cycle.")
+                logger.warning(f"[{WORKER_ALIAS}] Real-time signal missing from API. Skipping trade this cycle.")
 
         # ----------------------------------------------------------------------
-        # 6. SYNC TELEMETRY TO FIREBASE
+        # ৬. ফায়ারবেসে স্টেট সিঙ্ক
         # ----------------------------------------------------------------------
         current_signature = {
             "bal": sess.get("cur_bal", 0.0),
@@ -1501,6 +1539,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 "target_amount": target_goal,
                 "step": state["step_idx"] + 1,
                 "total_steps": total_steps,
+                "step_plan": state["locked_plan"],
+                "current_stake": state["locked_plan"][min(state["step_idx"], len(state["locked_plan"]) - 1)],
                 "wins": state["wins"],
                 "losses": state["losses"],
                 "currency": "BDT",
