@@ -1,14 +1,13 @@
 # ==============================================================================
-# DRX WINGO CLUSTER - CENTRAL MANAGER NODE (ম্যানেজার কোড)
+# DRX WINGO CLUSTER - CENTRAL MANAGER NODE (আপডেটেড ও সুরক্ষিত ম্যানেজার কোড)
 # ==============================================================================
-# Architecture:
-# - Pure Manager Engine (Zero Selenium/Browser overhead on Manager)
-# - Controls Telegram Bot, User Auth, 24H Passkey System, Admin Fleet Panel (/data, /device)
-# - Interactive loading animation with subscript percentage steps (₂₀%, ₄₀%, ₆₀%, ₈₀%, ₁₀₀%)
-# - Instant Cancel action on pending operations
-# - Dynamic Fleet monitoring & individual/global emergency kill-switch
-# - Centralized VIP Unicode styling and typography system
-# - Precision balance formatting (decimals/paisa preserved in balance, zero-paisa bets)
+# Architecture & Enhancements:
+# - Streamlined Dual-Platform Engine: Amar Club & DK Win
+# - Shortened Clean Typography: WINGO 30S VIP
+# - Anti-Flood Rate-Limiter: Protects Telegram UI Buttons from disappearing
+# - Zero-Drop Persistent Control Dashboard (SHOT, BAL, STATS, STOP)
+# - Handles 24/7 Continuous Trading & Auto-Target Stop without UI glitches
+# - Full Admin Fleet Control (/data, /device, /admin, /pass)
 # ==============================================================================
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ import uuid
 import logging
 
 # ==============================================================================
-# AUTOMATIC DEPENDENCY BOOTSTRAP
+# LOGGING CONFIGURATION
 # ==============================================================================
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +33,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("MANAGER_NODE")
 
+# ==============================================================================
+# AUTOMATIC DEPENDENCY BOOTSTRAP
+# ==============================================================================
 def ensure_dependencies():
     packages = [
         ("pyTelegramBotAPI", "telebot"),
@@ -59,6 +61,7 @@ ensure_dependencies()
 
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.apihelper import ApiTelegramException
 
 # ==============================================================================
 # CENTRALIZED UNICODE STYLING & TYPOGRAPHY SYSTEM
@@ -126,6 +129,7 @@ SPINNER_FRAMES = ["◴", "◷", "◶", "◵"]
 user_sessions = {}
 active_sessions = {}
 
+# শুধুমাত্র Amar Club এবং DK Win রাখা হয়েছে
 PLATFORMS = {
     "site_amarclub": {
         "name": "Amar Club",
@@ -136,31 +140,11 @@ PLATFORMS = {
         "name": "DK Win",
         "login": "https://dkwin6.com/#/login",
         "wingo": "https://dkwin6.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_tigroclub": {
-        "name": "Tigro Club",
-        "login": "https://tigroclub.vip/#/login",
-        "wingo": "https://tigroclub.vip/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_hgnice": {
-        "name": "HG Nice",
-        "login": "https://hgnice.org/#/login",
-        "wingo": "https://hgnice.org/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_kanpur91": {
-        "name": "Kanpur 91",
-        "login": "https://kanpur91.com/#/login",
-        "wingo": "https://kanpur91.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
-    },
-    "site_bdgwinsvip": {
-        "name": "BDG Wins VIP",
-        "login": "https://bdgwinsvip.com/#/login",
-        "wingo": "https://bdgwinsvip.com/#/saasLottery/WinGo?gameCode=WinGo_30S&lottery=WinGo"
     }
 }
 
 # ==============================================================================
-# HELPER UTILITIES
+# HELPER UTILITIES & ANTI-FLOOD UI EDITORS
 # ==============================================================================
 def safe_delete_message(chat_id, message_id):
     if not message_id:
@@ -169,6 +153,56 @@ def safe_delete_message(chat_id, message_id):
         bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception:
         pass
+
+def safe_edit_dashboard(chat_id, message_id, text, reply_markup=None, sid=None):
+    """
+    টেলিগ্রাম রেট-লিমিট ও বাটন ডিলিট হওয়া রোধ করার জন্য সুরক্ষিত মেসেজ এডিটর।
+    """
+    if not message_id:
+        return None
+
+    sess = active_sessions.get(sid, {}) if sid else {}
+    now = time.time()
+    
+    # শেষ এডিটের সাথে টেক্সটের মিল থাকলে কল বন্ধ রাখা
+    if sess.get("last_rendered_text") == text:
+        return message_id
+
+    # প্রতি ২ সেকেন্ডের ভেতর একাধিকবার এডিট কল না করা (Telegram Flood Protection)
+    if now - sess.get("last_edit_time", 0) < 2.0:
+        return message_id
+
+    try:
+        bot.edit_message_text(
+            text=text,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup
+        )
+        if sess:
+            sess["last_edit_time"] = now
+            sess["last_rendered_text"] = text
+        return message_id
+    except ApiTelegramException as e:
+        err_text = str(e).lower()
+        if "message is not modified" in err_text:
+            return message_id
+        elif "too many requests" in err_text or "flood" in err_text:
+            logger.warning(f"Telegram flood limit active for {chat_id}. Holding edit.")
+            return message_id
+        elif "message to edit not found" in err_text or "message can't be edited" in err_text:
+            try:
+                new_msg = bot.send_message(chat_id, text, reply_markup=reply_markup)
+                if sess:
+                    sess["last_dashboard_msg_id"] = new_msg.message_id
+                    sess["last_edit_time"] = now
+                    sess["last_rendered_text"] = text
+                return new_msg.message_id
+            except Exception:
+                pass
+    except Exception as ex:
+        logger.debug(f"Dashboard edit exception: {ex}")
+    return message_id
 
 # ==============================================================================
 # FIREBASE RESILIENT SYNCHRONIZER
@@ -334,19 +368,12 @@ def get_passkey_gate_keyboard():
     )
     return markup
 
-def get_six_platform_keyboard():
+def get_two_platform_keyboard():
+    """শুধুমাত্র Amar Club এবং DK Win অপশনযুক্ত কিবোর্ড"""
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
         InlineKeyboardButton(f"⬩➤ {to_vip_text('AMAR CLUB')}", callback_data="site_amarclub"),
         InlineKeyboardButton(f"⬩➤ {to_vip_text('DK WIN')}", callback_data="site_dkwin")
-    )
-    markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_vip_text('TIGRO CLUB')}", callback_data="site_tigroclub"),
-        InlineKeyboardButton(f"⬩➤ {to_vip_text('HG NICE')}", callback_data="site_hgnice")
-    )
-    markup.add(
-        InlineKeyboardButton(f"⬩➤ {to_vip_text('KANPUR 91')}", callback_data="site_kanpur91"),
-        InlineKeyboardButton(f"⬩➤ {to_vip_text('BDG WINS VIP')}", callback_data="site_bdgwinsvip")
     )
     return markup
 
@@ -379,16 +406,15 @@ def get_admin_dashboard_keyboard():
 # WORKER DISPATCH & LOAD BALANCER ENGINE
 # ==============================================================================
 def find_best_worker():
-    """Selects the online Worker Node with the lowest network latency."""
     all_terminals = firebase_sync_http("terminals", "GET")
     now = time.time()
-
     candidates = []
+
     if all_terminals and isinstance(all_terminals, dict):
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict) and tinfo.get("status") in ["FREE", "IDLE"]:
                 hb = float(tinfo.get("heartbeat", 0))
-                if now - hb <= 20.0:
+                if now - hb <= 25.0:
                     lat = float(tinfo.get("latency_ms", 9999.0))
                     load = int(tinfo.get("load", 0))
                     candidates.append((tid, load, lat))
@@ -397,12 +423,11 @@ def find_best_worker():
         candidates.sort(key=lambda x: (x[2], x[1]))
         return candidates[0][0]
 
-    # Fallback to any online node
     if all_terminals and isinstance(all_terminals, dict):
         for tid, tinfo in all_terminals.items():
             if isinstance(tinfo, dict):
                 hb = float(tinfo.get("heartbeat", 0))
-                if now - hb <= 20.0:
+                if now - hb <= 25.0:
                     return tid
     return None
 
@@ -421,12 +446,11 @@ def relay_action_to_worker(worker_id, action_payload):
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
 # ==============================================================================
 def worker_events_listener():
-    """Listens for event responses from Workers (e.g. login results, wingo ready, win target reached)."""
+    """Listens for event responses from Workers without dropping UI Buttons."""
     while True:
         try:
             events = firebase_sync_http("manager_events", "GET")
             if events and isinstance(events, dict):
-                # ক্রমানুসারে (Timestamp order) সাজিয়ে নেওয়া যাতে রেস কন্ডিশনে ১০০% পেজ আটকে না থাকে
                 sorted_events = sorted(
                     events.items(),
                     key=lambda item: float(item[1].get("timestamp", 0)) if isinstance(item[1], dict) else 0
@@ -439,7 +463,6 @@ def worker_events_listener():
                         chat_id = ev_data.get("chat_id")
                         sid = ev_data.get("session_id")
 
-                        # যদি মেমোরিতে সেশন মুছে যায়, তবে ফায়ারবেস থেকে রিস্টোর করে নেওয়া
                         if sid and sid not in active_sessions:
                             fb_sess = firebase_sync_http(f"sessions/{sid}", "GET")
                             if fb_sess and isinstance(fb_sess, dict):
@@ -466,7 +489,6 @@ def worker_events_listener():
                         sess = active_sessions.get(sid, {})
 
                         if ev_type == "PROGRESS_STAGE":
-                            # লগইন সফল হয়ে গেলে পুরানো ১০০% লোডিং মেসেজ দিয়ে যেন বাটন মুছে না যায়
                             if sess.get("logged_in"):
                                 continue
 
@@ -477,22 +499,14 @@ def worker_events_listener():
 
                             prog_bar = format_progress_bar(pct)
                             content = (
-                                f"<b>﴾ ֎ {to_vip_text('DRX WINGO VIP CLUSTER')} ֎ ﴿</b>\n\n"
-                                f"<b>⬩➤ {to_vip_text('CONNECTING REMOTE WORKER ENGINE')}</b>\n"
+                                f"<b>﴾ ֎ {to_vip_text('WINGO 30S')} ֎ ﴿</b>\n\n"
+                                f"<b>⬩➤ {to_vip_text('CONNECTING ENGINE')}</b>\n"
                                 f"Platform: <b>{site_name}</b>\n"
                                 f"Status: <i>{text_stage}</i>\n\n"
                                 f"<b>{prog_bar}</b>"
                             )
                             if anim_msg_id:
-                                try:
-                                    bot.edit_message_text(
-                                        content,
-                                        chat_id=chat_id,
-                                        message_id=anim_msg_id,
-                                        reply_markup=get_cancel_only_keyboard(sid)
-                                    )
-                                except Exception:
-                                    pass
+                                safe_edit_dashboard(chat_id, anim_msg_id, content, get_cancel_only_keyboard(sid), sid)
 
                         elif ev_type == "LOGIN_SUCCESS":
                             sess["logged_in"] = True
@@ -505,11 +519,9 @@ def worker_events_listener():
                                 f"Platform: <b>{site_name}</b>\n"
                                 f"Account: <code>{masked_phone}</code>\n"
                                 f"Terminal: <code>{terminal_id}</code>\n\n"
-                                f"Click <b>{to_vip_text('START')}</b> below to configure and run trading parameters:"
+                                f"Click <b>{to_vip_text('START')}</b> below to configure trading parameters:"
                             )
                             target_msg_id = sess.get("last_dashboard_msg_id") or ev_data.get("anim_msg_id")
-                            success_delivered = False
-
                             if target_msg_id:
                                 try:
                                     bot.edit_message_text(
@@ -519,20 +531,12 @@ def worker_events_listener():
                                         reply_markup=get_start_screen_keyboard(sid)
                                     )
                                     sess["last_dashboard_msg_id"] = target_msg_id
-                                    success_delivered = True
                                 except Exception:
-                                    pass
-
-                            if not success_delivered:
-                                try:
-                                    msg = bot.send_message(
-                                        chat_id,
-                                        caption,
-                                        reply_markup=get_start_screen_keyboard(sid)
-                                    )
+                                    msg = bot.send_message(chat_id, caption, reply_markup=get_start_screen_keyboard(sid))
                                     sess["last_dashboard_msg_id"] = msg.message_id
-                                except Exception:
-                                    pass
+                            else:
+                                msg = bot.send_message(chat_id, caption, reply_markup=get_start_screen_keyboard(sid))
+                                sess["last_dashboard_msg_id"] = msg.message_id
 
                         elif ev_type == "LOGIN_FAILED":
                             site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
@@ -557,7 +561,7 @@ def worker_events_listener():
                             live_bal = float(ev_data.get("live_balance", 0.0))
                             sess["current_balance"] = live_bal
                             config_caption = (
-                                f"<b>﴾ ֎ {to_vip_text('WINGO 30S MARKET ACTIVE')} ֎ ﴿</b>\n\n"
+                                f"<b>﴾ ֎ {to_vip_text('WINGO 30S ACTIVE')} ֎ ﴿</b>\n\n"
                                 f"Platform: <b>{site_name}</b>\n"
                                 f"Live Balance: <code>{format_bdt_balance(live_bal)}</code>\n\n"
                                 f"Set your <b>{to_vip_text('TARGET')}</b> and <b>{to_vip_text('STEPS')}</b> below, then press <b>{to_vip_text('START AUTO')}</b>:"
@@ -580,7 +584,7 @@ def worker_events_listener():
                             w = ev_data.get("wins", 0)
                             l = ev_data.get("losses", 0)
                             msg = (
-                                f"<b>﴾ ֎ {to_vip_text('TARGET ACHIEVED SUCCESSFULLY')} ֎ ﴿</b>\n\n"
+                                f"<b>﴾ ֎ {to_vip_text('TARGET ACHIEVED')} ֎ ﴿</b>\n\n"
                                 f"Your target profit has been fulfilled smoothly.\n\n"
                                 f"Starting Balance: <code>{format_bdt_balance(start_b)}</code>\n"
                                 f"Final Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
@@ -588,36 +592,30 @@ def worker_events_listener():
                                 f"Total Wins: <b>{to_bold_digits(w)}</b> | Losses: <b>{to_bold_digits(l)}</b>\n\n"
                                 f"<i>Worker node released and browser cleanly freed.</i>"
                             )
-                            bot.send_message(chat_id, msg)
+                            last_m = sess.get("last_dashboard_msg_id")
+                            if last_m:
+                                try:
+                                    bot.edit_message_text(msg, chat_id=chat_id, message_id=last_m)
+                                except Exception:
+                                    bot.send_message(chat_id, msg)
+                            else:
+                                bot.send_message(chat_id, msg)
                             active_sessions.pop(sid, None)
 
-                        elif ev_type == "CIRCUIT_BREAKER_TRIGGERED":
-                            site_name = ev_data.get("site_name", "") or sess.get("site_name", "Amar Club")
-                            start_b = float(ev_data.get("start_balance", 0.0))
-                            cur_b = float(ev_data.get("final_balance", 0.0))
-                            step = ev_data.get("step", 5)
-                            tot_steps = ev_data.get("total_steps", 5)
-                            w = ev_data.get("wins", 0)
-                            l = ev_data.get("losses", 0)
+                        elif ev_type == "ACCOUNT_LOGGED_OUT":
+                            reason_msg = ev_data.get("message", "Account logged out on another device.")
                             sess["is_trading"] = False
-                            cb_msg = (
-                                f"<b>﴾ ✖ {to_vip_text('CIRCUIT BREAKER TRIGGERED')} ✖ ﴿</b>\n\n"
-                                f"<b>Capital Protection Activated:</b> Loss reached the final tier (<b>Step {to_bold_digits(step)} of {to_bold_digits(tot_steps)}</b>).\n"
-                                f"Trading has been <b>AUTOMATICALLY STOPPED</b> to preserve capital and prevent balance liquidation.\n\n"
-                                f"Platform: <b>{site_name}</b>\n"
-                                f"Starting Balance: <code>{format_bdt_balance(start_b)}</code>\n"
-                                f"Preserved Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
-                                f"Total Wins: <b>{to_bold_digits(w)}</b> | Losses: <b>{to_bold_digits(l)}</b>\n\n"
-                                f"Send /start to reconfigure or restart trading."
+                            logout_caption = (
+                                f"<b>﴾ ✖ {to_vip_text('SESSION LOGGED OUT')} ✖ ﴿</b>\n\n"
+                                f"{reason_msg}\n\n"
+                                f"Send /start to re-login."
                             )
                             last_m = sess.get("last_dashboard_msg_id")
                             if last_m:
                                 try:
-                                    bot.edit_message_text(cb_msg, chat_id=chat_id, message_id=last_m)
+                                    bot.edit_message_text(logout_caption, chat_id=chat_id, message_id=last_m)
                                 except Exception:
-                                    bot.send_message(chat_id, cb_msg)
-                            else:
-                                bot.send_message(chat_id, cb_msg)
+                                    bot.send_message(chat_id, logout_caption)
                             active_sessions.pop(sid, None)
 
                         elif ev_type == "LIVE_TELEMETRY":
@@ -630,26 +628,20 @@ def worker_events_listener():
                             sess["current_balance"] = cur_b
                             sess["wins"] = w
                             sess["losses"] = l
+
                             report = (
-                                f"<b>﴾ ֎ {to_vip_text('24/7 GHOST ENGINE ACTIVE')} ֎ ﴿</b>\n\n"
+                                f"<b>﴾ ֎ {to_vip_text('WINGO 30S LIVE')} ֎ ﴿</b>\n\n"
                                 f"Platform: <b>{ev_data.get('site_name', sess.get('site_name', ''))}</b>\n"
                                 f"Live Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
                                 f"Target Goal: <code>{format_bdt_target(t_tot)}</code>\n"
                                 f"Current Step: <b>Step {to_bold_digits(step)}</b>\n"
                                 f"Wins: <b>{to_bold_digits(w)}</b> | Losses: <b>{to_bold_digits(l)}</b>\n"
                                 f"Timestamp: <code>{time.strftime('%H:%M:%S')}</code>\n\n"
-                                f"<b>LIVE STATUS</b>: Martingale Step Money Management active (Zero paisa / BDT)."
+                                f"<b>LIVE STATUS</b>: Martingale Continuous Trading Active."
                             )
                             last_m = sess.get("last_dashboard_msg_id")
                             if last_m:
-                                try:
-                                    bot.edit_message_text(report, chat_id=chat_id, message_id=last_m, reply_markup=get_trading_control_keyboard(sid))
-                                except Exception:
-                                    m2 = bot.send_message(chat_id, report, reply_markup=get_trading_control_keyboard(sid))
-                                    sess["last_dashboard_msg_id"] = m2.message_id
-                            else:
-                                m2 = bot.send_message(chat_id, report, reply_markup=get_trading_control_keyboard(sid))
-                                sess["last_dashboard_msg_id"] = m2.message_id
+                                safe_edit_dashboard(chat_id, last_m, report, get_trading_control_keyboard(sid), sid)
 
                         elif ev_type == "BALANCE_RESPONSE":
                             bal = float(ev_data.get("live_balance", 0.0))
@@ -677,7 +669,8 @@ def worker_events_listener():
                                 f"Loss Streak: <b>{to_bold_digits(d.get('cur_l_streak', 0))}</b> (Max: {to_bold_digits(d.get('max_l_streak', 0))})\n"
                                 f"Total Consecutive Trades: <b>{to_bold_digits(d.get('tradesDone', 0))}</b>"
                             )
-                            bot.send_message(chat_id, stat_txt, parse_mode="HTML")
+                            # মূল কন্ট্রোল বক্স ঠিক রেখে পপ-আপ অ্যালার্ট বা সেফ মেসেজ পাঠানো
+                            bot.send_message(chat_id, stat_txt)
 
         except Exception as e:
             logger.debug(f"Worker event listener tick: {e}")
@@ -718,11 +711,11 @@ def handle_start(message):
 
     user_sessions[chat_id]["step"] = "CHOOSE_SITE"
     welcome_text = (
-        f"<b>﴾ ֎ {to_vip_text('WINGO 30S VIP AUTOMATION')} ֎ ﴿</b>\n\n"
-        f"Welcome to the high-frequency automated trading engine.\n"
+        f"<b>﴾ ֎ {to_vip_text('WINGO 30S')} ֎ ﴿</b>\n\n"
+        f"Welcome to high-frequency automated trading.\n"
         f"Please select your target trading platform to proceed:"
     )
-    bot.send_message(chat_id, welcome_text, reply_markup=get_six_platform_keyboard())
+    bot.send_message(chat_id, welcome_text, reply_markup=get_two_platform_keyboard())
 
 @bot.message_handler(commands=['pass'])
 def handle_pass_command(message):
@@ -755,15 +748,13 @@ def handle_pass_command(message):
 def render_fleet_keyboard(terminals: dict):
     markup = InlineKeyboardMarkup(row_width=1)
     now_ts = time.time()
-
     active_terminals = {}
+
     if terminals and isinstance(terminals, dict):
         for tid, tinfo in list(terminals.items()):
             if isinstance(tinfo, dict):
                 hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
                 st = tinfo.get("status", "FREE")
-
-                # Auto-prune stale/dead ghost nodes older than 25 seconds from Firebase
                 if hb_diff > 25 or st == "OFFLINE":
                     threading.Thread(
                         target=firebase_sync_http,
@@ -773,7 +764,6 @@ def render_fleet_keyboard(terminals: dict):
                 else:
                     active_terminals[tid] = tinfo
 
-    # Sort terminals by alias or ID for clean consistent ordering (W-01, W-02, ...)
     sorted_items = sorted(
         active_terminals.items(),
         key=lambda x: str(x[1].get("alias", x[0]))
@@ -782,14 +772,12 @@ def render_fleet_keyboard(terminals: dict):
     for tid, tinfo in sorted_items:
         st = tinfo.get("status", "FREE")
         is_busy = (st == "BUSY")
-
         alias = str(tinfo.get("alias") or tid.replace("worker_", "").upper())
         if len(alias) > 8 and not tinfo.get("alias"):
             alias = alias[-6:]
 
         status_glyph = "🟢" if is_busy else "⚪"
         status_label = "BUSY" if is_busy else "IDLE"
-
         btn_text = f"{status_glyph} ⬩➤ 𝐓𝐄𝐑𝐌𝐈𝐍𝐀𝐋: {alias} [{to_vip_text(status_label)}]"
         markup.add(InlineKeyboardButton(btn_text, callback_data=f"adm_insp_w:{tid}"))
 
@@ -798,11 +786,9 @@ def render_fleet_keyboard(terminals: dict):
             InlineKeyboardButton(f"⚠️ {to_vip_text('NO ACTIVE WORKERS ONLINE')}", callback_data="adm_fleet")
         )
 
-    # Global Emergency Stop & Clean Fleet
     markup.add(
         InlineKeyboardButton(f"✦︎ {to_vip_text('FREE ALL / PURGE GHOSTS')} ✦︎", callback_data="adm_free_all")
     )
-    # Refresh Fleet
     markup.add(
         InlineKeyboardButton(f"֎ {to_vip_text('REFRESH FLEET')} ֎", callback_data="adm_fleet")
     )
@@ -871,7 +857,7 @@ def handle_callbacks(call):
                 )
                 bot.edit_message_text(caption, chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_passkey_gate_keyboard())
             else:
-                bot.edit_message_text(f"<b>﴾ ֎ {to_vip_text('SELECT PLATFORM')} ֎ ﴿</b>", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_six_platform_keyboard())
+                bot.edit_message_text(f"<b>﴾ ֎ {to_vip_text('SELECT PLATFORM')} ֎ ﴿</b>", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_two_platform_keyboard())
         else:
             bot.answer_callback_query(call.id, "You have not joined the official channel yet!", show_alert=True)
         return
@@ -959,7 +945,6 @@ def handle_callbacks(call):
         status_raw = tinfo.get("status", "UNKNOWN")
         is_alive = (hb_diff <= 25 and status_raw != "OFFLINE")
 
-        # Query session details
         assigned_user = tinfo.get("assigned_user_id", "None")
         sess_id = tinfo.get("session_id", "None")
 
@@ -971,7 +956,6 @@ def handle_callbacks(call):
         masked_ph = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
         platform = sess_detail.get("site_name", "Amar Club")
 
-        # Fetch live stats for this session
         task_data = {}
         if assigned_user and sess_id and assigned_user != "None":
             task_data = firebase_sync_http(f"user_tasks/{assigned_user}/{sess_id}", "GET") or {}
@@ -1018,16 +1002,13 @@ def handle_callbacks(call):
     elif action == "adm_kill_w":
         if chat_id != SUPER_ADMIN_ID: return
         target_tid = sid
-        # Broadcast emergency stop to this specific worker
         relay_action_to_worker(target_tid, {
             "kind": "EMERGENCY_STOP",
             "worker_id": target_tid
         })
-        # Delete or reset in Firebase
         firebase_sync_http(f"terminals/{target_tid}", "DELETE")
 
         bot.answer_callback_query(call.id, f"Worker {target_tid} stopped and slot freed!", show_alert=True)
-        # Return to fleet overview
         terms = firebase_sync_http("terminals", "GET") or {}
         markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
         bot.edit_message_text(
@@ -1112,6 +1093,7 @@ def handle_callbacks(call):
         )
         return
 
+    # সাইট নির্বাচন (Amar Club & DK Win)
     elif action in PLATFORMS:
         p_cfg = PLATFORMS[action]
         site_name = p_cfg["name"]
@@ -1133,7 +1115,9 @@ def handle_callbacks(call):
             "created_at": time.time(),
             "anim_tick": 0,
             "assigned_worker": None,
-            "last_dashboard_msg_id": call.message.message_id
+            "last_dashboard_msg_id": call.message.message_id,
+            "last_edit_time": 0,
+            "last_rendered_text": ""
         }
         user_sessions.setdefault(chat_id, {})["active_sid"] = sid
 
@@ -1173,7 +1157,7 @@ def handle_callbacks(call):
     elif action == "start_cfg" and sid in active_sessions:
         sess = active_sessions[sid]
         sess["last_dashboard_msg_id"] = call.message.message_id
-        bot.answer_callback_query(call.id, "Preparing WinGo 30S market...")
+        bot.answer_callback_query(call.id, "Preparing market...")
 
         prog_bar = format_progress_bar(80)
         loading_text = (
@@ -1232,12 +1216,10 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "Please set a target balance first!", show_alert=True)
             return
 
-        bot.answer_callback_query(call.id, "Starting 24/7 background ghost automation...")
+        bot.answer_callback_query(call.id, "Starting 24/7 background automation...")
         assigned_worker = sess.get("assigned_worker")
         cur_b = sess.get("current_balance", 0.0)
 
-        # STRICT TARGET RULE:
-        # If user defined target 500, target goal is 500. Do not sum start balance + target.
         target_goal = sess["target_profit"]
         if target_goal <= cur_b:
             target_goal = cur_b + target_goal
@@ -1257,7 +1239,7 @@ def handle_callbacks(call):
         sess["target_goal"] = target_goal
 
         dashboard_caption = (
-            f"<b>﴾ ֎ {to_vip_text('24/7 GHOST ENGINE ACTIVE')} ֎ ﴿</b>\n\n"
+            f"<b>﴾ ֎ {to_vip_text('WINGO 30S LIVE')} ֎ ﴿</b>\n\n"
             f"Platform: <b>{sess.get('site_name', '')}</b>\n"
             f"Live Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
             f"Target Goal: <code>{format_bdt_target(target_goal)}</code>\n"
@@ -1292,7 +1274,6 @@ def handle_callbacks(call):
     elif action == "bal" and sid in active_sessions:
         sess = active_sessions[sid]
         cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
-        # Instant non-blocking response from active cache so auto-trading NEVER pauses!
         if cur_b and cur_b > 0:
             bot.answer_callback_query(call.id, f"Live Balance: {format_bdt_balance(cur_b)}", show_alert=True)
         else:
@@ -1344,7 +1325,6 @@ def handle_callbacks(call):
             bot.send_message(chat_id, stop_caption)
 
     elif action == "cancel":
-        # Guaranteed instant cancellation
         target_sid = sid or user_sessions.get(chat_id, {}).get("active_sid")
         if target_sid and target_sid in active_sessions:
             assigned_worker = active_sessions[target_sid].get("assigned_worker")
@@ -1361,7 +1341,7 @@ def handle_callbacks(call):
         bot.send_message(
             chat_id,
             f"<b>﴾ ✖ {to_vip_text('SESSION CANCELED')} ✖ ﴿</b>\n\n"
-            f"Browser destroyed and worker slot freed immediately.\n"
+            f"Worker slot freed immediately.\n"
             f"Send /start to begin a new session."
         )
 
@@ -1398,7 +1378,7 @@ def handle_user_text(message):
             bot.send_message(
                 chat_id,
                 f"<b>﴾ ֎ {to_vip_text('PASSKEY ACTIVATED (24 HOURS)')} ֎ ﴿</b>\n\nYour session is authorized. Select a platform to proceed:",
-                reply_markup=get_six_platform_keyboard()
+                reply_markup=get_two_platform_keyboard()
             )
         else:
             pm = bot.send_message(
@@ -1457,8 +1437,8 @@ def handle_user_text(message):
 
         prog_bar = format_progress_bar(20)
         connecting_text = (
-            f"<b>﴾ ֎ {to_vip_text('DRX WINGO VIP CLUSTER')} ֎ ﴿</b>\n\n"
-            f"<b>⬩➤ {to_vip_text('CONNECTING REMOTE WORKER ENGINE')}</b>\n"
+            f"<b>﴾ ֎ {to_vip_text('WINGO 30S')} ֎ ﴿</b>\n\n"
+            f"<b>⬩➤ {to_vip_text('CONNECTING ENGINE')}</b>\n"
             f"Platform: <b>{sess.get('site_name', '')}</b>\n"
             f"Status: <i>Dispatching session to fastest worker node...</i>\n\n"
             f"<b>{prog_bar}</b>"
@@ -1519,7 +1499,7 @@ def handle_user_text(message):
 
             cur_bal = sess.get("current_balance", 0.0)
             config_caption = (
-                f"<b>﴾ ֎ {to_vip_text('WINGO 30S MARKET ACTIVE')} ֎ ﴿</b>\n\n"
+                f"<b>﴾ ֎ {to_vip_text('WINGO 30S ACTIVE')} ֎ ﴿</b>\n\n"
                 f"Platform: <b>{sess.get('site_name', '')}</b>\n"
                 f"Live Balance: <code>{format_bdt_balance(cur_bal)}</code>\n"
                 f"Selected Target: <code>{format_bdt_target(val)}</code>\n\n"
@@ -1554,7 +1534,7 @@ def handle_user_text(message):
 
             cur_bal = sess.get("current_balance", 0.0)
             config_caption = (
-                f"<b>﴾ ֎ {to_vip_text('WINGO 30S MARKET ACTIVE')} ֎ ﴿</b>\n\n"
+                f"<b>﴾ ֎ {to_vip_text('WINGO 30S ACTIVE')} ֎ ﴿</b>\n\n"
                 f"Platform: <b>{sess.get('site_name', '')}</b>\n"
                 f"Live Balance: <code>{format_bdt_balance(cur_bal)}</code>\n"
                 f"Selected Steps: <b>{to_bold_digits(steps_val)} Steps</b>\n\n"
