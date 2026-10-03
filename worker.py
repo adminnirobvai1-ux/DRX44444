@@ -121,7 +121,7 @@ FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-d
 # PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm990gv.edgeone.dev/apipid.json")
 
 # --- নতুন সুপার-স্মুথ প্রেডিকশন এপিআই (সক্রিয়) ---
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://drx-tm-vip-hack-code6.edgeone.dev/top.json")
+PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://dark-killer-wingo-30s-signal-engine.ai.studio/top.json")
 
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
