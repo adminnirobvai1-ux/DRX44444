@@ -116,7 +116,6 @@ def to_subscript_digits(val) -> str:
 # GLOBAL RUNTIME CONFIGURATION
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-default-rtdb.firebaseio.com")
-# নতুন এপিআই লিঙ্ক
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://wily-aqua-9umi3jasno-dphebjunjob1.edgeone.dev/top.json")
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
@@ -156,17 +155,6 @@ PLATFORMS = {
 # ADVANCED COMPOUND MARTINGALE ENGINE (100% PORTED FROM HTML STEP CALCULATOR)
 # ==============================================================================
 def calculate_html_martingale_steps(balance: float, steps_count: int) -> dict:
-    """
-    Ported verbatim from the provided HTML Step Calculator:
-    Formula:
-      sumPowers = 2^(stepsCount) - 1
-      firstStep = balance / sumPowers
-      step_i = round(firstStep * 2^i, 2)
-      steps[last] += balance - total (absorbing rounding error)
-    
-    Prepares an executable integer plan so that the sum of stakes
-    NEVER exceeds total balance, preventing balance exhaustion before Step 7/10.
-    """
     bal = max(1.0, float(balance))
     count = max(1, int(steps_count))
     
@@ -183,10 +171,8 @@ def calculate_html_martingale_steps(balance: float, steps_count: int) -> dict:
     rounding_error = round((bal - running_total), 2)
     float_steps[-1] = round(float_steps[-1] + rounding_error, 2)
     
-    # Executable integer stake progression (strictly minimum 1 BDT per bet)
     int_steps = [max(1, int(round(s))) for s in float_steps]
     
-    # গ্যারান্টি: মোট স্টেক কখনোই মূল ব্যালেন্সের চেয়ে বড় হবে না
     if sum(int_steps) > bal:
         overflow = int(sum(int_steps) - bal)
         int_steps[-1] = max(1, int_steps[-1] - overflow)
@@ -254,82 +240,62 @@ def emit_event_to_manager(event_type: str, data: dict):
     firebase_sync_http(f"manager_events/{uuid.uuid4().hex[:10]}", "PUT", payload)
 
 # ==============================================================================
-# PURE PYTHON PREDICTION ENGINE (নতুন জেসন ফরম্যাট পার্সার)
+# PURE PYTHON PREDICTION ENGINE (LIGHTWEIGHT NEW API HANDLER)
 # ==============================================================================
-def python_fetch_live_prediction(timeout: float = 4.0):
+def python_fetch_live_prediction(timeout: float = 3.0):
+    """
+    নতুন EdgeOne JSON এপিআই থেকে সরাসরি দ্রুত ও লাইটওয়েট পদ্ধতিতে সিগন্যাল রিড করে।
+    """
     url = f"{PREDICTION_API_URL}?t={int(time.time()*1000)}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache"
+        "Cache-Control": "no-cache"
     }
 
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as response:
             if response.status != 200:
-                logger.warning(f"Prediction API HTTP Status {response.status}")
+                logger.warning(f"Prediction API Status: {response.status}")
                 return None
             data = json.loads(response.read().decode("utf-8"))
 
-        pred_side = None
-        confidence = 88
-        period = None
-        pattern = ""
+        if not isinstance(data, dict):
+            return None
 
-        # নতুন JSON অনুযায়ী 'prediction' ফিল্ড থেকে মান নেওয়া
+        # ১. সরাসরি 'prediction' কি-ওয়ার্ড রিড
         raw_pred = str(data.get("prediction") or "").upper().strip()
+        pred_side = None
         if "SMALL" in raw_pred:
             pred_side = "SMALL"
         elif "BIG" in raw_pred:
             pred_side = "BIG"
 
-        # ফলব্যাক সাপোর্ট
-        if not pred_side and data.get("next"):
-            next_obj = data["next"]
-            raw_size = str(next_obj.get("size") or next_obj.get("pred") or "").upper().strip()
-            if "SMALL" in raw_size:
-                pred_side = "SMALL"
-            elif "BIG" in raw_size:
-                pred_side = "BIG"
+        # ২. পিরিয়ড আইডি সংগ্রহ
+        raw_period = str(data.get("period") or "").strip()
+        period = raw_period if raw_period else None
 
-        if not pred_side and data.get("top_engine"):
-            raw_top = str(data["top_engine"].get("prediction") or "").upper().strip()
-            if "SMALL" in raw_top:
-                pred_side = "SMALL"
-            elif "BIG" in raw_top:
-                pred_side = "BIG"
+        # ৩. একুরেসি / উইন রেট পার্সিং
+        confidence = 85
+        rate_str = str(data.get("win_rate") or data.get("percentage") or "").replace("%", "").strip()
+        if rate_str.isdigit():
+            confidence = int(rate_str)
 
         if not pred_side:
-            logger.warning("Prediction API returned valid response but no definitive BIG or SMALL signal.")
             return None
-
-        # পিরিয়ড ফিল্ড পার্সিং
-        raw_period = data.get("period")
-        if raw_period is not None and str(raw_period).strip():
-            period = str(raw_period).strip()
-
-        # উইন রেট / কনফিডেন্স পার্সিং
-        raw_rate = str(data.get("win_rate") or data.get("percentage") or "").replace("%", "").strip()
-        if raw_rate:
-            try:
-                confidence = int(float(raw_rate))
-            except Exception:
-                confidence = 85
-
-        pattern = str(data.get("engine_name") or data.get("name") or data.get("server") or "LOCAL MATH V3")
 
         return {
             "prediction": pred_side,
             "confidence": confidence,
             "period": period,
-            "pattern": pattern,
+            "countdown": data.get("countdown"),
+            "pattern": data.get("name") or data.get("engine_name") or "",
             "history": data.get("history") or []
         }
 
     except Exception as e:
-        logger.error(f"Failed to fetch live prediction from Python backend: {e}")
+        logger.error(f"Prediction fetch error: {e}")
         return None
 
 # ==============================================================================
@@ -379,7 +345,6 @@ def enforce_low_ram_guard():
     try:
         mem = psutil.virtual_memory()
         if mem.percent > 80.0:
-            logger.warning(f"Memory high: {mem.percent}%. Dumping garbage & cache...")
             gc.collect()
             for s in list(active_sessions.values()):
                 d = s.get("driver")
@@ -443,7 +408,7 @@ def terminate_session_cleanly(session_id):
         "task": None,
         "load": len(active_sessions)
     })
-    logger.info(f"Slot cleared successfully. Worker {NODE_ID} ready for new assignments.")
+    logger.info(f"Slot cleared successfully. Worker {NODE_ID} ready.")
 
 # ==============================================================================
 # HARDENED BROWSER SESSION ISOLATION (0.5GB RAM SAFE)
@@ -549,9 +514,6 @@ def safe_tab_execute(sid, task_fn, timeout=20.0):
         return None
 
     if result_container["error"]:
-        err_msg = str(result_container["error"])
-        if "unexpectedly closed" in err_msg or "connection" in err_msg:
-            logger.error(f"Driver connection alert: {err_msg}")
         return None
 
     return result_container["res"]
@@ -788,6 +750,9 @@ if (hash.includes('WinGo') || href.includes('WinGo') || bodyText.includes('Win G
 return false;
 """
 
+# ==============================================================================
+# ULTRA-FAST DIRECT BALANCE FETCHER (SUPER FAST DOM SCRAPING)
+# ==============================================================================
 FAST_FETCH_BALANCE_JS = r"""
 try {
     let reloadBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
@@ -795,7 +760,6 @@ try {
         try { reloadBtn.click(); } catch(e){}
     }
 
-    // সরাসরি টার্গেটেড ব্যালেন্স ক্লাস
     let targetedEls = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
     for (let i = 0; i < targetedEls.length; i++) {
         let txt = targetedEls[i].innerText || '';
@@ -806,7 +770,6 @@ try {
         }
     }
 
-    // ফলব্যাক ১: লেবেল অনুযায়ী প্যারেন্ট সার্চ
     let els = document.querySelectorAll('span, div, p');
     for (let i = 0; i < els.length; i++) {
         let txt = els[i].innerText || '';
@@ -820,7 +783,6 @@ try {
         }
     }
 
-    // ফলব্যাক ২: স্ট্যান্ডঅ্যালোন কারেন্সি সিম্বল ম্যাচ
     for (let i = 0; i < els.length; i++) {
         let txt = (els[i].innerText || '').trim();
         if (/^[৳₹$€£]\s*[\d,]+\.?\d*$/.test(txt)) {
@@ -1317,23 +1279,14 @@ def execute_worker_prepare_wingo(chat_id, sid, wingo_url, site_name):
 # AUTOMATED TRADING LOOP (FULL 7/10 STEP COMPOUND MARTINGALE RUNNER)
 # ==============================================================================
 def worker_monitor_trading_loop(chat_id, sid, site_name):
-    """
-    Automated trade cycle loop:
-    - 100% Locked Step Plan based on HTML compound formula.
-    - Direct Market History Outcome Verifier: verifies whether SMALL came when SMALL was bet.
-    - Step Recovery: Reset directly to Step 1 immediately upon ANY Win.
-    - Zero False-Loss Premature Triggers: Wait for market settlement.
-    """
     sess = active_sessions.get(sid)
     if not sess:
         return
 
     logger.info(f"[{WORKER_ALIAS}] Launching Python trading monitor for session: {sid}")
 
-    # HUD ইনজেকশন
     safe_tab_execute(sid, lambda drv: drv.execute_script(WINGO_INIT_HUD_JS))
 
-    # প্রাথমিক ব্যালেন্স নিশ্চিতকরণ
     initial_bal = float(sess.get("start_bal", 0.0))
     if initial_bal <= 0:
         fresh_b = safe_tab_execute(sid, lambda drv: drv.execute_script(FAST_FETCH_BALANCE_JS))
@@ -1343,7 +1296,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         sess["current_balance"] = initial_bal
         sess["last_bal_ts"] = time.time()
 
-    # টার্গেট ও স্টেপ সংখ্যা অটো-কনফিগারেশন
     target_goal = float(sess.get("target_goal", 0.0))
     total_steps = int(sess.get("total_steps") or 7)
 
@@ -1352,9 +1304,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         sess["target_goal"] = target_goal
         logger.info(f"[{WORKER_ALIAS}] Auto-Target Goal locked at: {target_goal} BDT")
 
-    # ==========================================================================
-    # এইচটিএমএল ভিত্তিক স্টেপ ক্যালকুলেশন ও পার্মানেন্ট লক
-    # ==========================================================================
     martingale_meta = calculate_html_martingale_steps(initial_bal, total_steps)
     locked_plan = martingale_meta["int_steps"]
     float_plan = martingale_meta["float_steps"]
@@ -1398,9 +1347,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         loop_tick += 1
         enforce_low_ram_guard()
 
-        # ----------------------------------------------------------------------
-        # ১. লগআউট অথবা সেশন ডিসকানেক্ট গার্ড
-        # ----------------------------------------------------------------------
         def _check_logout(drv):
             return drv.execute_script("""
                 const hash = window.location.hash || '';
@@ -1433,18 +1379,12 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             terminate_session_cleanly(sid)
             break
 
-        # ----------------------------------------------------------------------
-        # ২. সময় বিশ্লেষণ (BST UTC+6)
-        # ----------------------------------------------------------------------
         now_bst = bst_now()
         seconds = now_bst.second
         remaining_seconds = 30 - (seconds % 30)
         current_cycle = int(time.time() // 30)
 
-        # ----------------------------------------------------------------------
-        # ৩. নির্ভরযোগ্য মার্কেট রেজাল্ট যাচাই ও উইন / লস মূল্যায়ন
-        # ----------------------------------------------------------------------
-        # আগের বেট দেওয়া থাকলে এবং তার রেজাল্ট এখনো চূড়ান্ত না হয়ে থাকলে চেক করবে
+        # ৩. মার্কেট রেজাল্ট যাচাই ও উইন / লস মূল্যায়ন
         if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
             bet_cycle = state.get("last_bet_cycle", 0)
             round_ended = (current_cycle > bet_cycle) if bet_cycle > 0 else (remaining_seconds >= 20)
@@ -1458,7 +1398,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 eval_source = "NONE"
                 actual_market_side = None
 
-                # স্তর ১: সরাসরি সাইটের গেম হিস্ট্রি (মার্কেট রেকর্ড) টেবিলে যাচাই
+                # স্তর ১: সরাসরি সাইটের গেম হিস্ট্রি DOM যাচাই
                 dom_eval = safe_tab_execute(
                     sid,
                     lambda drv: drv.execute_script(CHECK_ROUND_OUTCOME_DOM_JS, target_period, target_side),
@@ -1470,7 +1410,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     is_evaluated = True
                     eval_source = f"MARKET_DOM_{actual_market_side}"
 
-                # স্তর ২: ব্যাকএন্ড প্রেডিকশন এপিআই হিস্ট্রি চেক
+                # স্তর ২: ব্যাকএন্ড প্রেডিকশন এপিআই হিস্ট্রি চেক (যদি ডাটাতে হিস্ট্রি থাকে)
                 if not is_evaluated:
                     live_api_data = python_fetch_live_prediction(timeout=2.5)
                     if live_api_data and live_api_data.get("history"):
@@ -1492,7 +1432,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                                     eval_source = f"API_STATUS_{status_str}"
                                     break
 
-                # স্তর ৩: পরবর্তী বেটের সময় ঘনিয়ে আসলে ওয়ালেট ব্যালেন্স দ্বারা ভেরিফিকেশন
+                # স্তর ৩: ওয়ালেট ব্যালেন্স দ্বারা কনফার্মেশন
                 if not is_evaluated and remaining_seconds <= 18:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("""
                         let rBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
@@ -1517,7 +1457,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             is_evaluated = True
                             eval_source = "BALANCE_CONFIRMED_LOSS"
 
-                # ফলাফল নিশ্চিত হওয়ার পর স্টেপ আপডেট
+                # ফলাফল নিশ্চিত হওয়ার পর পরবর্তী স্টেপ নির্ধারণ
                 if is_evaluated:
                     state["last_evaluated_period"] = target_period
 
@@ -1534,13 +1474,12 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         if state["cur_w_streak"] > state["max_w_streak"]:
                             state["max_w_streak"] = state["cur_w_streak"]
 
-                        # উইন হলে তাৎক্ষণিকভাবে ১ম স্টেপে রিসেট (Step 1)
                         state["step_idx"] = 0
                         next_stake = state["locked_plan"][0]
                         logger.info(
-                            f"[{WORKER_ALIAS}] [WIN VERIFIED! PROFIT RECOVERED] Period: {target_period} | "
+                            f"[{WORKER_ALIAS}] [WIN VERIFIED!] Period: {target_period} | "
                             f"Bet: {target_side} | Market: {actual_market_side or 'WIN'} | "
-                            f"Source: {eval_source} | Step RESET to 1 (Next Bet: {next_stake} BDT)"
+                            f"Source: {eval_source} | Reset to Step 1 (Next Bet: {next_stake} BDT)"
                         )
                     else:
                         state["losses"] += 1
@@ -1549,31 +1488,25 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         if state["cur_l_streak"] > state["max_l_streak"]:
                             state["max_l_streak"] = state["cur_l_streak"]
 
-                        # লস হলে তালিকার পরবর্তী স্টেপে যাবে
                         if state["step_idx"] < len(state["locked_plan"]) - 1:
                             state["step_idx"] += 1
                         else:
-                            logger.warning(
-                                f"[{WORKER_ALIAS}] All {total_steps} steps lost. "
-                                f"Recycling back to Step 1."
-                            )
+                            logger.warning(f"[{WORKER_ALIAS}] All {total_steps} steps finished. Recycling to Step 1.")
                             state["step_idx"] = 0
 
                         next_stake = state["locked_plan"][state["step_idx"]]
                         logger.info(
                             f"[{WORKER_ALIAS}] [LOSS VERIFIED] Period: {target_period} | "
                             f"Bet: {target_side} | Market: {actual_market_side or 'LOSS'} | "
-                            f"Source: {eval_source} | Advancing to Step {state['step_idx'] + 1}/{total_steps} (Next Bet: {next_stake} BDT)"
+                            f"Source: {eval_source} | Step {state['step_idx'] + 1}/{total_steps} (Next Bet: {next_stake} BDT)"
                         )
 
-        # ----------------------------------------------------------------------
         # ৪. টার্গেট ব্যালেন্স মনিটরিং
-        # ----------------------------------------------------------------------
         live_b = sess.get("cur_bal", 0.0)
         start_b = sess.get("start_bal", 0.0)
 
         if target_goal > 0 and live_b >= target_goal and start_b > 0:
-            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Stopping cleanly...")
+            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Stopping...")
             sess["is_trading"] = False
 
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", {
@@ -1607,13 +1540,10 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             terminate_session_cleanly(sid)
             break
 
-        # ----------------------------------------------------------------------
-        # ৫. ডাইনামিক ট্রেড ডিসপ্যাচ (লক হওয়ার ৮ থেকে ১৯ সেকেন্ড পূর্বে)
-        # ----------------------------------------------------------------------
+        # ৫. নতুন এপিআই প্রেডিকশন অনুযায়ী ট্রেড ডিসপ্যাচ
         if 8 <= remaining_seconds <= 19 and state["last_cycle_dispatched"] != current_cycle:
-            # আগের রাউন্ডের ফলাফল পুরোপুরি নিশ্চিত না হওয়া পর্যন্ত অপেক্ষা
             if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
-                logger.info(f"[{WORKER_ALIAS}] Waiting for period {state['last_bet_period']} market settlement before placing new bet...")
+                logger.info(f"[{WORKER_ALIAS}] Waiting for period {state['last_bet_period']} market settlement...")
             else:
                 state["last_cycle_dispatched"] = current_cycle
 
@@ -1639,7 +1569,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             )
                         )
 
-                        # ট্রেডের আগের ফ্রেশ ব্যালেন্স সেভ
                         cur_b_check = safe_tab_execute(sid, lambda drv: drv.execute_script(FAST_FETCH_BALANCE_JS))
                         if cur_b_check and float(cur_b_check) > 0:
                             state["pre_bet_balance"] = float(cur_b_check)
@@ -1663,15 +1592,13 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             state["last_bet_side"] = signal_side
                             state["last_bet_amount"] = stake_amount
                             state["last_bet_cycle"] = current_cycle
-                            logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED] Side: {signal_side} | Amount: {stake_amount} BDT | Period: {active_period}")
+                            logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED] Side: {signal_side} | Stake: {stake_amount} BDT | Period: {active_period}")
                         else:
                             logger.error(f"[{WORKER_ALIAS}] [TRADE FAILED] Reason: {order_result}")
                 else:
-                    logger.warning(f"[{WORKER_ALIAS}] Real-time signal missing from API. Skipping trade this cycle.")
+                    logger.warning(f"[{WORKER_ALIAS}] Signal missing from new API. Skipping cycle.")
 
-        # ----------------------------------------------------------------------
-        # ৬. ফায়ারবেসে লাইভ স্টেট সিঙ্ক
-        # ----------------------------------------------------------------------
+        # ৬. লাইভ স্টেট সিঙ্ক
         curr_step_idx = min(state["step_idx"], len(state["locked_plan"]) - 1)
         current_signature = {
             "bal": sess.get("cur_bal", 0.0),
@@ -1767,7 +1694,7 @@ def worker_task_listener():
                 chat_id = action_pkt.get("chat_id")
 
                 if kind in ["EMERGENCY_STOP", "EMERGENCY_STOP_ALL"]:
-                    logger.warning(f"Emergency stop received: {kind}. Terminating all sessions!")
+                    logger.warning(f"Emergency stop received: {kind}. Terminating sessions...")
                     for s_id in list(active_sessions.keys()):
                         terminate_session_cleanly(s_id)
                     cleanup_zombie_browsers()
