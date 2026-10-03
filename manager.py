@@ -314,7 +314,7 @@ def get_start_screen_keyboard(sid):
     )
     markup.add(
         InlineKeyboardButton(
-            f"🌐 {to_vip_text('STEP')}",
+            f"⌨ {to_vip_text('STEP')}",
             web_app=WebAppInfo(url=STEP_WEBAPP_URL)
         )
     )
@@ -339,7 +339,7 @@ def get_setup_param_keyboard(sid):
     )
     markup.add(
         InlineKeyboardButton(
-            f"🌐 {to_vip_text('STEP')}",
+            f"⌨ {to_vip_text('STEP')}",
             web_app=WebAppInfo(url=STEP_WEBAPP_URL)
         )
     )
@@ -367,7 +367,7 @@ def get_trading_control_keyboard(sid):
     # নিচে আলাদা লম্বা STEP বাটন (WebApp Integration)
     markup.add(
         InlineKeyboardButton(
-            f"🌐 {to_vip_text('STEP')}",
+            f"⌨ {to_vip_text('STEP')}",
             web_app=WebAppInfo(url=STEP_WEBAPP_URL)
         )
     )
