@@ -116,7 +116,11 @@ def to_subscript_digits(val) -> str:
 # GLOBAL RUNTIME CONFIGURATION
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-default-rtdb.firebaseio.com")
-PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://medieval-pink-yqnjxslo-dp376cefm0gv.edgeone.dev/apipid.json")
+# নতুন API লিঙ্ক এখানে সেট করা হলো
+PREDICTION_API_URL = os.environ.get(
+    "PREDICTION_API_URL", 
+    "https://wily-aqua-9umi3jasno-dphebjunjob1.edgeone.dev/top.json"
+)
 HEADLESS_MODE = os.environ.get("HEADLESS", "true").lower() == "true"
 
 custom_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
@@ -253,9 +257,28 @@ def emit_event_to_manager(event_type: str, data: dict):
     firebase_sync_http(f"manager_events/{uuid.uuid4().hex[:10]}", "PUT", payload)
 
 # ==============================================================================
-# PURE PYTHON PREDICTION ENGINE (NO JAVASCRIPT API FETCHING)
+# PURE PYTHON PREDICTION ENGINE (DIRECT FETCH FROM NEW JSON SCHEMA)
 # ==============================================================================
-def python_fetch_live_prediction(timeout: float = 4.0):
+def python_fetch_live_prediction(timeout: float = 3.0):
+    """
+    নতুন API ফরম্যাট পার্সার:
+    {
+      "status": "success",
+      "game": "WinGo 30s",
+      "top": "⭐ TOP",
+      "name": "SERVER 1 (LOCAL MATH V3)",
+      "period": "...",
+      "prediction": "BIG" / "SMALL",
+      "percentage": "88%",
+      "server": "SERVER 1",
+      "engine_name": "LOCAL MATH V3",
+      "win_rate": "88%",
+      "countdown": 18,
+      "countdown_display": "00:18",
+      "timestamp": ...,
+      "channel": "@DARK67HACK"
+    }
+    """
     url = f"{PREDICTION_API_URL}?t={int(time.time()*1000)}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -272,50 +295,60 @@ def python_fetch_live_prediction(timeout: float = 4.0):
                 return None
             data = json.loads(response.read().decode("utf-8"))
 
-        pred_side = None
-        confidence = 80
-        period = None
-        pattern = ""
+        if not isinstance(data, dict):
+            return None
 
-        next_obj = data.get("next") or {}
-        if next_obj:
+        # ১. সরাসরি API-এর prediction ফিল্ড থেকে মান নেওয়া
+        raw_pred = str(data.get("prediction") or "").upper().strip()
+        pred_side = None
+        if "SMALL" in raw_pred:
+            pred_side = "SMALL"
+        elif "BIG" in raw_pred:
+            pred_side = "BIG"
+
+        # ফলব্যাক: নেস্টেড অবজেক্ট সাপোর্ট (যদি কখনও পরিবর্তন হয়)
+        if not pred_side and data.get("next"):
+            next_obj = data["next"]
             raw_size = str(next_obj.get("size") or next_obj.get("pred") or "").upper().strip()
             if "SMALL" in raw_size:
                 pred_side = "SMALL"
             elif "BIG" in raw_size:
                 pred_side = "BIG"
 
-            confidence = int(next_obj.get("confidence") or data.get("stats", {}).get("accuracy") or 85)
-            period = str(next_obj.get("period", "")).strip() or None
-            pattern = next_obj.get("pattern", "")
-
         if not pred_side and data.get("top_engine"):
-            top = data["top_engine"]
-            raw_top = str(top.get("prediction") or "").upper().strip()
+            raw_top = str(data["top_engine"].get("prediction") or "").upper().strip()
             if "SMALL" in raw_top:
                 pred_side = "SMALL"
             elif "BIG" in raw_top:
                 pred_side = "BIG"
-            confidence = int(top.get("win_rate") or 75)
-
-        if not pred_side and data.get("history") and len(data["history"]) > 0:
-            last_hist = data["history"][0]
-            raw_hist = str(last_hist.get("pred") or "").upper().strip()
-            if "SMALL" in raw_hist:
-                pred_side = "SMALL"
-            elif "BIG" in raw_hist:
-                pred_side = "BIG"
 
         if not pred_side:
-            logger.warning("Prediction API returned valid response but no definitive BIG or SMALL signal.")
+            logger.warning(f"Prediction API returned valid response but no definitive BIG or SMALL signal: '{raw_pred}'")
             return None
+
+        # ২. পিরিয়ড ফিল্ড পার্সিং
+        raw_period = data.get("period")
+        period = str(raw_period).strip() if raw_period is not None and str(raw_period).strip() != "" else None
+
+        # ৩. উইন রেট / কনফিডেন্স পার্সিং
+        confidence = 88
+        raw_rate = str(data.get("win_rate") or data.get("percentage") or "").replace("%", "").strip()
+        if raw_rate:
+            try:
+                confidence = int(float(raw_rate))
+            except Exception:
+                confidence = 85
+
+        engine_name = str(data.get("engine_name") or data.get("name") or data.get("server") or "LOCAL MATH V3")
+        countdown = data.get("countdown")
 
         return {
             "prediction": pred_side,
             "confidence": confidence,
             "period": period,
-            "pattern": pattern,
-            "history": data.get("history") or data.get("data", {}).get("history") or []
+            "countdown": countdown,
+            "pattern": engine_name,
+            "history": data.get("history") or []
         }
 
     except Exception as e:
@@ -778,9 +811,6 @@ if (hash.includes('WinGo') || href.includes('WinGo') || bodyText.includes('Win G
 return false;
 """
 
-# ==============================================================================
-# ULTRA-FAST DIRECT BALANCE FETCHER (SUPER FAST DOM SCRAPING)
-# ==============================================================================
 FAST_FETCH_BALANCE_JS = r"""
 try {
     let reloadBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
@@ -788,7 +818,6 @@ try {
         try { reloadBtn.click(); } catch(e){}
     }
 
-    // সরাসরি টার্গেটেড ব্যালেন্স ক্লাস
     let targetedEls = document.querySelectorAll('.Wallet__balance-num, .wallet-user-balance, .balance-num, [class*="balance" i], [class*="wallet" i]');
     for (let i = 0; i < targetedEls.length; i++) {
         let txt = targetedEls[i].innerText || '';
@@ -799,7 +828,6 @@ try {
         }
     }
 
-    // ফলব্যাক ১: লেবেল অনুযায়ী প্যারেন্ট সার্চ
     let els = document.querySelectorAll('span, div, p');
     for (let i = 0; i < els.length; i++) {
         let txt = els[i].innerText || '';
@@ -813,7 +841,6 @@ try {
         }
     }
 
-    // ফলব্যাক ২: স্ট্যান্ডঅ্যালোন কারেন্সি সিম্বল ম্যাচ
     for (let i = 0; i < els.length; i++) {
         let txt = (els[i].innerText || '').trim();
         if (/^[৳₹$€£]\s*[\d,]+\.?\d*$/.test(txt)) {
@@ -843,9 +870,6 @@ try {
 return null;
 """
 
-# ==============================================================================
-# PASSIVE HUD ENGINE (DISPLAY ONLY - WITH COMPLETE STEP PREVIEW)
-# ==============================================================================
 WINGO_INIT_HUD_JS = r"""
 (function(){
     let hud = document.getElementById('drx-prediction-hud');
@@ -934,9 +958,6 @@ if (hudPlan && planPreview) {
 }
 """
 
-# ==============================================================================
-# DYNAMIC BIDIRECTIONAL TRADE EXECUTION (BIG & SMALL HARDENED)
-# ==============================================================================
 EXECUTE_BIDIRECTIONAL_ORDER_JS = r"""
 const targetSide = String(arguments[0] || '').toUpperCase().trim();
 const rawAmt = arguments[1];
@@ -958,7 +979,6 @@ const simClick = (el) => {
 };
 
 try {
-    // যেকোনো অনাকাঙ্ক্ষিত পপআপ বা ব্যানার সরানো
     document.querySelectorAll('.van-dialog, .announcement-box, .bonus-dialog').forEach(el => {
         let cBtn = el.querySelector('.van-dialog__confirm, button');
         if (cBtn) try { cBtn.click(); } catch(e){}
@@ -997,10 +1017,8 @@ try {
         return { status: "FAILED", reason: "TARGET_BUTTON_NOT_FOUND_FOR_" + targetSide };
     }
 
-    // বাটন ক্লিক (BIG অথবা SMALL)
     simClick(targetBtn);
 
-    // ইনপুট বক্সে টাকার পরিমাণ ইনজেক্ট
     setTimeout(() => {
         let inpEl = document.querySelector("input[type='number'], input.van-field__control, .van-stepper__input");
         if (inpEl) {
@@ -1015,7 +1033,6 @@ try {
             inpEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // ফাইনাল বেট কনফার্ম বাটন ক্লিক
         setTimeout(() => {
             let confirmBtn = document.querySelector('button.bet-amount, button[class*="bet-amount"], .Betting__C-foot-total, .van-button--danger, .van-button--warning, .van-button--primary');
             if (!confirmBtn) {
@@ -1053,9 +1070,6 @@ try {
 }
 """
 
-# ==============================================================================
-# DIRECT MARKET RECORD VERIFIER (হিস্ট্রি টেবিলে মার্কেট ফলাফল যাচাই)
-# ==============================================================================
 CHECK_ROUND_OUTCOME_DOM_JS = r"""
 const targetPeriod = String(arguments[0] || '').trim();
 const targetPred = String(arguments[1] || '').toUpperCase().trim();
@@ -1087,14 +1101,12 @@ try {
         if (isPeriodMatch) {
             let actualSide = null;
 
-            // মেথড ১: সরাসরি টেক্সটে 'Big' বা 'Small' খোঁজা
             if (/\bbig\b/i.test(txt) || txt.includes('Big') || txt.includes('BIG') || txt.includes('大')) {
                 actualSide = 'BIG';
             } else if (/\bsmall\b/i.test(txt) || txt.includes('Small') || txt.includes('SMALL') || txt.includes('小')) {
                 actualSide = 'SMALL';
             }
 
-            // মেথড ২: ক্লাসের নাম থেকে Big/Small চেক
             if (!actualSide) {
                 if (r.querySelector('[class*="big" i], .c-big, .is-big')) {
                     actualSide = 'BIG';
@@ -1103,7 +1115,6 @@ try {
                 }
             }
 
-            // মেথড ৩: উইঙ্গো নাম্বার (0-4 = SMALL, 5-9 = BIG)
             if (!actualSide) {
                 let numEl = r.querySelector('.GameList__C-body-num, [class*="num" i], [class*="ball" i], span[class*="number" i]');
                 if (numEl) {
@@ -1114,7 +1125,6 @@ try {
                 }
             }
 
-            // মেথড ৪: রো-এর ভেতরের টেক্সট থেকে নাম্বার ডিটেকশন
             if (!actualSide) {
                 let m = txt.match(/\b([0-9])\b/);
                 if (m) {
@@ -1321,9 +1331,9 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
     """
     Automated trade cycle loop:
     - 100% Locked Step Plan based on HTML compound formula.
+    - Real-time API Signal Synchronizer with exact period verification.
     - Direct Market History Outcome Verifier: verifies whether SMALL came when SMALL was bet.
     - Step Recovery: Reset directly to Step 1 immediately upon ANY Win.
-    - Zero False-Loss Premature Triggers: Wait for market settlement.
     """
     sess = active_sessions.get(sid)
     if not sess:
@@ -1344,7 +1354,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         sess["current_balance"] = initial_bal
         sess["last_bal_ts"] = time.time()
 
-    # টার্গেট ও স্টেপ সংখ্যা অটো-কনফিগারেশন
     target_goal = float(sess.get("target_goal", 0.0))
     total_steps = int(sess.get("total_steps") or 7)
 
@@ -1353,9 +1362,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         sess["target_goal"] = target_goal
         logger.info(f"[{WORKER_ALIAS}] Auto-Target Goal locked at: {target_goal} BDT")
 
-    # ==========================================================================
     # এইচটিএমএল ভিত্তিক স্টেপ ক্যালকুলেশন ও পার্মানেন্ট লক
-    # ==========================================================================
     martingale_meta = calculate_html_martingale_steps(initial_bal, total_steps)
     locked_plan = martingale_meta["int_steps"]
     float_plan = martingale_meta["float_steps"]
@@ -1443,9 +1450,8 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         current_cycle = int(time.time() // 30)
 
         # ----------------------------------------------------------------------
-        # ৩. নির্ভরযোগ্য মার্কেট রেজাল্ট যাচাই ও উইন / লস মূল্যায়ন
+        # ৩. মার্কেট রেজাল্ট যাচাই ও উইন / লস মূল্যায়ন
         # ----------------------------------------------------------------------
-        # আগের বেট দেওয়া থাকলে এবং তার রেজাল্ট এখনো চূড়ান্ত না হয়ে থাকলে চেক করবে
         if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
             bet_cycle = state.get("last_bet_cycle", 0)
             round_ended = (current_cycle > bet_cycle) if bet_cycle > 0 else (remaining_seconds >= 20)
@@ -1471,29 +1477,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     is_evaluated = True
                     eval_source = f"MARKET_DOM_{actual_market_side}"
 
-                # স্তর ২: ব্যাকএন্ড প্রেডিকশন এপিআই হিস্ট্রি চেক
-                if not is_evaluated:
-                    live_api_data = python_fetch_live_prediction(timeout=2.5)
-                    if live_api_data and live_api_data.get("history"):
-                        for hist_item in live_api_data["history"]:
-                            hp = str(hist_item.get("period") or hist_item.get("pid") or hist_item.get("issue") or "").strip()
-                            if hp == target_period or (len(target_period) >= 4 and len(hp) >= 4 and (hp.endswith(target_period[-4:]) or target_period.endswith(hp[-4:]))):
-                                actual_sz = str(hist_item.get("actual_size") or hist_item.get("size") or "").upper().strip()
-                                status_str = str(hist_item.get("status") or "").upper().strip()
-
-                                if actual_sz in ["BIG", "SMALL"]:
-                                    actual_market_side = actual_sz
-                                    round_won = (target_side == actual_sz)
-                                    is_evaluated = True
-                                    eval_source = f"MARKET_API_{actual_sz}"
-                                    break
-                                elif status_str in ["WIN", "LOSS"]:
-                                    round_won = (status_str == "WIN")
-                                    is_evaluated = True
-                                    eval_source = f"API_STATUS_{status_str}"
-                                    break
-
-                # স্তর ৩: পরবর্তী বেটের সময় ঘনিয়ে আসলে ওয়ালেট ব্যালেন্স দ্বারা ভেরিফিকেশন
+                # স্তর ২: পরবর্তী বেটের সময় ঘনিয়ে আসলে ওয়ালেট ব্যালেন্স দ্বারা ভেরিফিকেশন
                 if not is_evaluated and remaining_seconds <= 18:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("""
                         let rBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
@@ -1609,16 +1593,15 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             break
 
         # ----------------------------------------------------------------------
-        # ৫. ডাইনামিক ট্রেড ডিসপ্যাচ (লক হওয়ার ৮ থেকে ১৯ সেকেন্ড পূর্বে)
+        # ৫. ডাইনামিক ট্রেড ডিসপ্যাচ (এপিআই পোলিং ও পিরিয়ড সিঙ্ক)
         # ----------------------------------------------------------------------
-        if 8 <= remaining_seconds <= 19 and state["last_cycle_dispatched"] != current_cycle:
-            # আগের রাউন্ডের ফলাফল পুরোপুরি নিশ্চিত না হওয়া পর্যন্ত অপেক্ষা
-            if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
+        # লক হওয়ার ৬ থেকে ২৫ সেকেন্ডের মধ্যে প্রতি সেকেন্ডে এপিআই চেক করবে
+        if 6 <= remaining_seconds <= 26 and state["last_cycle_dispatched"] != current_cycle:
+            # আগের রাউন্ডের ফলাফল নিশ্চিত না হওয়া পর্যন্ত কিছুক্ষণ অপেক্ষা (যদি সময় থাকে)
+            if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"] and remaining_seconds > 16:
                 logger.info(f"[{WORKER_ALIAS}] Waiting for period {state['last_bet_period']} market settlement before placing new bet...")
             else:
-                state["last_cycle_dispatched"] = current_cycle
-
-                pred_data = python_fetch_live_prediction()
+                pred_data = python_fetch_live_prediction(timeout=2.0)
                 if pred_data and pred_data.get("prediction"):
                     signal_side = pred_data["prediction"]
                     confidence = pred_data["confidence"]
@@ -1627,7 +1610,19 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     dom_period = safe_tab_execute(sid, lambda drv: drv.execute_script(GET_ACTIVE_ROUND_PERIOD_JS))
                     active_period = str(api_period or dom_period or f"CYCLE_{current_cycle}").strip()
 
-                    if state["last_bet_period"] != active_period:
+                    # পিরিয়ড সুরক্ষা: API এখনও আগের খেলা হওয়া পিরিয়ডেই আছে কিনা যাচাই
+                    is_already_bet_period = False
+                    if state["last_bet_period"]:
+                        lbp = str(state["last_bet_period"]).strip()
+                        if active_period == lbp:
+                            is_already_bet_period = True
+                        elif len(lbp) >= 3 and len(active_period) >= 3 and (lbp.endswith(active_period) or active_period.endswith(lbp)):
+                            is_already_bet_period = True
+
+                    if is_already_bet_period:
+                        logger.info(f"[{WORKER_ALIAS}] API period ({active_period}) already bet in last round. Waiting for new period signal...")
+                    else:
+                        state["last_cycle_dispatched"] = current_cycle
                         idx = min(state["step_idx"], len(state["locked_plan"]) - 1)
                         stake_amount = state["locked_plan"][idx]
 
@@ -1668,7 +1663,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         else:
                             logger.error(f"[{WORKER_ALIAS}] [TRADE FAILED] Reason: {order_result}")
                 else:
-                    logger.warning(f"[{WORKER_ALIAS}] Real-time signal missing from API. Skipping trade this cycle.")
+                    logger.debug(f"[{WORKER_ALIAS}] Polling prediction API...")
 
         # ----------------------------------------------------------------------
         # ৬. ফায়ারবেসে লাইভ স্টেট সিঙ্ক
@@ -1708,7 +1703,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         if loop_tick % 25 == 0:
             gc.collect()
 
-        time.sleep(1.2)
+        time.sleep(1.0)
 
 # ==============================================================================
 # WORKER TASK AND ACTION LISTENER LOOP
