@@ -113,7 +113,7 @@ def to_subscript_digits(val) -> str:
     return "".join(SUBSCRIPT_DIGIT_MAP.get(d, d) for d in str(val))
 
 # ==============================================================================
-# GLOBAL RUNTIME CONFIGURATION
+# GLOBAL RUNTIME CONFIGURATION (NEW API REPLACED)
 # ==============================================================================
 FIREBASE_RTDB_URL = os.environ.get("FIREBASE_RTDB_URL", "https://gsgssnn-580ca-default-rtdb.firebaseio.com")
 PREDICTION_API_URL = os.environ.get("PREDICTION_API_URL", "https://wily-aqua-9umi3jasno-dphebjunjob1.edgeone.dev/top.json")
@@ -240,62 +240,82 @@ def emit_event_to_manager(event_type: str, data: dict):
     firebase_sync_http(f"manager_events/{uuid.uuid4().hex[:10]}", "PUT", payload)
 
 # ==============================================================================
-# PURE PYTHON PREDICTION ENGINE (LIGHTWEIGHT NEW API HANDLER)
+# PURE PYTHON PREDICTION ENGINE (NEW API RESOLUTION)
 # ==============================================================================
-def python_fetch_live_prediction(timeout: float = 3.0):
+def python_fetch_live_prediction(timeout: float = 4.0):
     """
-    নতুন EdgeOne JSON এপিআই থেকে সরাসরি দ্রুত ও লাইটওয়েট পদ্ধতিতে সিগন্যাল রিড করে।
+    Fetches real-time prediction from the new lightweight API endpoint:
+    https://wily-aqua-9umi3jasno-dphebjunjob1.edgeone.dev/top.json
     """
     url = f"{PREDICTION_API_URL}?t={int(time.time()*1000)}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json",
-        "Cache-Control": "no-cache"
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache"
     }
 
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as response:
             if response.status != 200:
-                logger.warning(f"Prediction API Status: {response.status}")
+                logger.warning(f"Prediction API HTTP Status {response.status}")
                 return None
             data = json.loads(response.read().decode("utf-8"))
 
-        if not isinstance(data, dict):
-            return None
-
-        # ১. সরাসরি 'prediction' কি-ওয়ার্ড রিড
-        raw_pred = str(data.get("prediction") or "").upper().strip()
         pred_side = None
+        confidence = 85
+        period = None
+        pattern = ""
+
+        # ১. সরাসরি রুটের 'prediction' ফিল্ড রিড করা (নতুন এপিআই ফরম্যাট)
+        raw_pred = str(data.get("prediction") or "").upper().strip()
         if "SMALL" in raw_pred:
             pred_side = "SMALL"
         elif "BIG" in raw_pred:
             pred_side = "BIG"
 
-        # ২. পিরিয়ড আইডি সংগ্রহ
-        raw_period = str(data.get("period") or "").strip()
-        period = raw_period if raw_period else None
+        # পিরিয়ড এক্সট্র্যাক্ট করা
+        period = str(data.get("period") or "").strip() or None
 
-        # ৩. একুরেসি / উইন রেট পার্সিং
-        confidence = 85
-        rate_str = str(data.get("win_rate") or data.get("percentage") or "").replace("%", "").strip()
-        if rate_str.isdigit():
-            confidence = int(rate_str)
+        # কনফিডেন্স / উইন রেট পার্সিং
+        rate_str = str(data.get("win_rate") or data.get("percentage") or "").strip()
+        cleaned_digits = "".join([c for c in rate_str if c.isdigit()])
+        if cleaned_digits:
+            try:
+                confidence = int(cleaned_digits)
+            except Exception:
+                confidence = 88
+        else:
+            confidence = 88
+
+        pattern = str(data.get("engine_name") or data.get("name") or "LOCAL MATH V3")
+
+        # ২. ফলব্যাক লজিক (যদি কোনো কারণে নেস্টেড অবজেক্ট থাকে)
+        if not pred_side and data.get("next"):
+            next_obj = data["next"]
+            raw_size = str(next_obj.get("size") or next_obj.get("pred") or "").upper().strip()
+            if "SMALL" in raw_size:
+                pred_side = "SMALL"
+            elif "BIG" in raw_size:
+                pred_side = "BIG"
+            if not period:
+                period = str(next_obj.get("period", "")).strip() or None
 
         if not pred_side:
+            logger.warning("Prediction API returned valid response but no definitive BIG or SMALL signal.")
             return None
 
         return {
             "prediction": pred_side,
             "confidence": confidence,
             "period": period,
-            "countdown": data.get("countdown"),
-            "pattern": data.get("name") or data.get("engine_name") or "",
-            "history": data.get("history") or []
+            "pattern": pattern,
+            "history": data.get("history") or data.get("data", {}).get("history") or []
         }
 
     except Exception as e:
-        logger.error(f"Prediction fetch error: {e}")
+        logger.error(f"Failed to fetch live prediction from Python backend: {e}")
         return None
 
 # ==============================================================================
@@ -345,6 +365,7 @@ def enforce_low_ram_guard():
     try:
         mem = psutil.virtual_memory()
         if mem.percent > 80.0:
+            logger.warning(f"Memory high: {mem.percent}%. Dumping garbage & cache...")
             gc.collect()
             for s in list(active_sessions.values()):
                 d = s.get("driver")
@@ -408,7 +429,7 @@ def terminate_session_cleanly(session_id):
         "task": None,
         "load": len(active_sessions)
     })
-    logger.info(f"Slot cleared successfully. Worker {NODE_ID} ready.")
+    logger.info(f"Slot cleared successfully. Worker {NODE_ID} ready for new assignments.")
 
 # ==============================================================================
 # HARDENED BROWSER SESSION ISOLATION (0.5GB RAM SAFE)
@@ -514,6 +535,9 @@ def safe_tab_execute(sid, task_fn, timeout=20.0):
         return None
 
     if result_container["error"]:
+        err_msg = str(result_container["error"])
+        if "unexpectedly closed" in err_msg or "connection" in err_msg:
+            logger.error(f"Driver connection alert: {err_msg}")
         return None
 
     return result_container["res"]
@@ -1347,6 +1371,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         loop_tick += 1
         enforce_low_ram_guard()
 
+        # ১. লগআউট অথবা সেশন ডিসকানেক্ট গার্ড
         def _check_logout(drv):
             return drv.execute_script("""
                 const hash = window.location.hash || '';
@@ -1379,6 +1404,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             terminate_session_cleanly(sid)
             break
 
+        # ২. সময় বিশ্লেষণ (BST UTC+6)
         now_bst = bst_now()
         seconds = now_bst.second
         remaining_seconds = 30 - (seconds % 30)
@@ -1398,7 +1424,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                 eval_source = "NONE"
                 actual_market_side = None
 
-                # স্তর ১: সরাসরি সাইটের গেম হিস্ট্রি DOM যাচাই
+                # স্তর ১: সরাসরি সাইটের গেম হিস্ট্রি
                 dom_eval = safe_tab_execute(
                     sid,
                     lambda drv: drv.execute_script(CHECK_ROUND_OUTCOME_DOM_JS, target_period, target_side),
@@ -1410,7 +1436,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                     is_evaluated = True
                     eval_source = f"MARKET_DOM_{actual_market_side}"
 
-                # স্তর ২: ব্যাকএন্ড প্রেডিকশন এপিআই হিস্ট্রি চেক (যদি ডাটাতে হিস্ট্রি থাকে)
+                # স্তর ২: ব্যাকএন্ড প্রেডিকশন এপিআই হিস্ট্রি
                 if not is_evaluated:
                     live_api_data = python_fetch_live_prediction(timeout=2.5)
                     if live_api_data and live_api_data.get("history"):
@@ -1432,7 +1458,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                                     eval_source = f"API_STATUS_{status_str}"
                                     break
 
-                # স্তর ৩: ওয়ালেট ব্যালেন্স দ্বারা কনফার্মেশন
+                # স্তর ৩: ব্যালেন্স ভেরিফিকেশন
                 if not is_evaluated and remaining_seconds <= 18:
                     safe_tab_execute(sid, lambda drv: drv.execute_script("""
                         let rBtn = document.querySelector('.van-icon-replay, .reload-icon, .Wallet__balance-icon, [class*="reload" i], [class*="refresh" i]');
@@ -1457,7 +1483,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             is_evaluated = True
                             eval_source = "BALANCE_CONFIRMED_LOSS"
 
-                # ফলাফল নিশ্চিত হওয়ার পর পরবর্তী স্টেপ নির্ধারণ
                 if is_evaluated:
                     state["last_evaluated_period"] = target_period
 
@@ -1477,9 +1502,9 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         state["step_idx"] = 0
                         next_stake = state["locked_plan"][0]
                         logger.info(
-                            f"[{WORKER_ALIAS}] [WIN VERIFIED!] Period: {target_period} | "
+                            f"[{WORKER_ALIAS}] [WIN VERIFIED! PROFIT RECOVERED] Period: {target_period} | "
                             f"Bet: {target_side} | Market: {actual_market_side or 'WIN'} | "
-                            f"Source: {eval_source} | Reset to Step 1 (Next Bet: {next_stake} BDT)"
+                            f"Source: {eval_source} | Step RESET to 1 (Next Bet: {next_stake} BDT)"
                         )
                     else:
                         state["losses"] += 1
@@ -1491,14 +1516,17 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         if state["step_idx"] < len(state["locked_plan"]) - 1:
                             state["step_idx"] += 1
                         else:
-                            logger.warning(f"[{WORKER_ALIAS}] All {total_steps} steps finished. Recycling to Step 1.")
+                            logger.warning(
+                                f"[{WORKER_ALIAS}] All {total_steps} steps lost. "
+                                f"Recycling back to Step 1."
+                            )
                             state["step_idx"] = 0
 
                         next_stake = state["locked_plan"][state["step_idx"]]
                         logger.info(
                             f"[{WORKER_ALIAS}] [LOSS VERIFIED] Period: {target_period} | "
                             f"Bet: {target_side} | Market: {actual_market_side or 'LOSS'} | "
-                            f"Source: {eval_source} | Step {state['step_idx'] + 1}/{total_steps} (Next Bet: {next_stake} BDT)"
+                            f"Source: {eval_source} | Advancing to Step {state['step_idx'] + 1}/{total_steps} (Next Bet: {next_stake} BDT)"
                         )
 
         # ৪. টার্গেট ব্যালেন্স মনিটরিং
@@ -1506,7 +1534,7 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
         start_b = sess.get("start_bal", 0.0)
 
         if target_goal > 0 and live_b >= target_goal and start_b > 0:
-            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Stopping...")
+            logger.info(f"[{WORKER_ALIAS}] TARGET ACHIEVED! Goal: {target_goal} | Balance: {live_b}. Stopping cleanly...")
             sess["is_trading"] = False
 
             firebase_sync_http(f"user_tasks/{chat_id}/{sid}", "PUT", {
@@ -1540,10 +1568,10 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
             terminate_session_cleanly(sid)
             break
 
-        # ৫. নতুন এপিআই প্রেডিকশন অনুযায়ী ট্রেড ডিসপ্যাচ
+        # ৫. ডাইনামিক ট্রেড ডিসপ্যাচ
         if 8 <= remaining_seconds <= 19 and state["last_cycle_dispatched"] != current_cycle:
             if state["last_bet_period"] and state["last_evaluated_period"] != state["last_bet_period"]:
-                logger.info(f"[{WORKER_ALIAS}] Waiting for period {state['last_bet_period']} market settlement...")
+                logger.info(f"[{WORKER_ALIAS}] Waiting for period {state['last_bet_period']} market settlement before placing new bet...")
             else:
                 state["last_cycle_dispatched"] = current_cycle
 
@@ -1560,7 +1588,6 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                         idx = min(state["step_idx"], len(state["locked_plan"]) - 1)
                         stake_amount = state["locked_plan"][idx]
 
-                        # HUD আপডেট
                         safe_tab_execute(
                             sid, 
                             lambda drv: drv.execute_script(
@@ -1592,13 +1619,13 @@ def worker_monitor_trading_loop(chat_id, sid, site_name):
                             state["last_bet_side"] = signal_side
                             state["last_bet_amount"] = stake_amount
                             state["last_bet_cycle"] = current_cycle
-                            logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED] Side: {signal_side} | Stake: {stake_amount} BDT | Period: {active_period}")
+                            logger.info(f"[{WORKER_ALIAS}] [TRADE PLACED] Side: {signal_side} | Amount: {stake_amount} BDT | Period: {active_period}")
                         else:
                             logger.error(f"[{WORKER_ALIAS}] [TRADE FAILED] Reason: {order_result}")
                 else:
-                    logger.warning(f"[{WORKER_ALIAS}] Signal missing from new API. Skipping cycle.")
+                    logger.warning(f"[{WORKER_ALIAS}] Real-time signal missing from API. Skipping trade this cycle.")
 
-        # ৬. লাইভ স্টেট সিঙ্ক
+        # ৬. ফায়ারবেসে লাইভ স্টেট সিঙ্ক
         curr_step_idx = min(state["step_idx"], len(state["locked_plan"]) - 1)
         current_signature = {
             "bal": sess.get("cur_bal", 0.0),
@@ -1694,7 +1721,7 @@ def worker_task_listener():
                 chat_id = action_pkt.get("chat_id")
 
                 if kind in ["EMERGENCY_STOP", "EMERGENCY_STOP_ALL"]:
-                    logger.warning(f"Emergency stop received: {kind}. Terminating sessions...")
+                    logger.warning(f"Emergency stop received: {kind}. Terminating all sessions!")
                     for s_id in list(active_sessions.keys()):
                         terminate_session_cleanly(s_id)
                     cleanup_zombie_browsers()
