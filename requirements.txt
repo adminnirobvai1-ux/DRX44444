@@ -1,8 +1,11 @@
-# Central Manager Dependencies (Lightweight VPS / Cloud Run / Replit / Railway)
-pyTelegramBotAPI>=4.15.0
-requests>=2.31.0
-urllib3>=2.0.0
-
-# Worker Node Dependencies (Headless Firefox / Docker / VPS with GeckoDriver)
-selenium>=4.18.0
-psutil>=5.9.0
+selenium
+webdriver-manager
+psutil
+requests
+pyTelegramBotAPI
+python-telegram-bot
+aiohttp
+beautifulsoup4
+lxml
+urllib3
+websockets
